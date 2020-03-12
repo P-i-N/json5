@@ -190,7 +190,7 @@ inline error from_string(const document& doc, T& value)
 	if (!doc.root().is_object())
 		return { error::object_expected };
 
-	return detail::from_string(doc.root().get_object(), value.make_tuple());
+	return detail::from_string(object(doc.root()), value.make_tuple());
 }
 
 //---------------------------------------------------------------------------------------------------------------------

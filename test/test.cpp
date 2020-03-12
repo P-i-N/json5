@@ -18,7 +18,7 @@ void PrintJSONValue(const json5::value& value, int depth = 0)
 	{
 		std::cout << "[" << std::endl;
 
-		auto array = value.get_array();
+		auto array = json5::array(value);
 		for (size_t i = 0, S = array.size(); i < S; ++i)
 		{
 			for (int i = 0; i <= depth; ++i) std::cout << "  ";
@@ -34,9 +34,9 @@ void PrintJSONValue(const json5::value& value, int depth = 0)
 	{
 		std::cout << "{" << std::endl;
 
-		auto object = value.get_object();
+		auto object = json5::object(value);
 		size_t count = object.size();
-		for (auto kvp : value.get_object())
+		for (auto kvp : object)
 		{
 			for (int i = 0; i <= depth; ++i) std::cout << "  ";
 			std::cout << kvp.first << ": ";

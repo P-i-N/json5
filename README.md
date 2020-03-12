@@ -5,12 +5,6 @@ _... TODO_
 
 ### `json5::value`
 
-### `json5::boolean`
-
-### `json5::number`
-
-### `json5::string`
-
 ### `json5::object`
 
 ### `json5::array`

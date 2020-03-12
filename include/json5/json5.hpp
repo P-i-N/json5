@@ -51,13 +51,11 @@ public:
 	bool is_string() const noexcept { return _contentType >= content_type::last && (_offset & size_t_msbit); }
 	bool is_object() const noexcept { return _contentType >= content_type::last && !(_offset & size_t_msbit); }
 
-	bool get_bool(bool defaultValue = false) const noexcept;
-	int get_int(int defaultValue = 0) const noexcept;
-	float get_float(float defaultValue = 0.0f) const noexcept;
-	double get_double(double defaultValue = 0.0) const noexcept;
-	const char* get_c_str(const char* defaultValue = "") const noexcept;
-	class object get_object() const noexcept;
-	class array get_array() const noexcept;
+	bool get_bool(bool val = false) const noexcept { return is_boolean() ? _boolean : val; }
+	int get_int(int val = 0) const noexcept { return is_number() ? static_cast<int>(_number) : val; }
+	float get_float(float val = 0.0f) const noexcept { return is_number() ? static_cast<float>(_number) : val; }
+	double get_double(double val = 0.0) const noexcept { return is_number() ? _number : val; }
+	const char* get_c_str(const char* val = "") const noexcept;
 
 private:
 	using properties_t = std::unordered_map<detail::hashed_string_ref, value>;
@@ -85,8 +83,6 @@ private:
 		return emptyArray;
 	}
 
-	const char* c_str_offset(size_t offset) const noexcept;
-
 	union
 	{
 		content_type _contentType = content_type::null;
@@ -112,17 +108,15 @@ private:
 class object final
 {
 public:
+	object(const value& v) : _value(v.is_object() ? v : value::empty_object()) { }
+
 	class iterator final
 	{
 	public:
 		iterator(value::properties_t::const_iterator iter, const char *strBuff): _iter(iter), _stringBuffer(strBuff) { }
 		bool operator==(const iterator& other) const noexcept { return _iter == other._iter; }
 		iterator& operator++() { ++_iter; return *this; }
-
-		std::pair<const char *, const value&> operator*() const
-		{
-			return { _stringBuffer + _iter->first.offset, _iter->second };
-		}
+		auto operator*() const { return std::pair(_stringBuffer + _iter->first.offset, _iter->second); }
 
 	private:
 		value::properties_t::const_iterator _iter;
@@ -137,10 +131,7 @@ public:
 	bool contains(std::string_view key) const noexcept;
 
 private:
-	object(const value& v) : _value(v.is_object() ? v : value::empty_object()) { }
-
 	const value& _value;
-	friend class value;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -148,15 +139,18 @@ private:
 class array final
 {
 public:
+	array(const value& v) : _value(v.is_array() ? v : value::empty_array()) { }
+
+	using iterator = value::values_t::const_iterator;
+
+	iterator begin() const noexcept { return _value._values->begin(); }
+	iterator end() const noexcept { return _value._values->end(); }
 	size_t size() const noexcept { return _value._values->size(); }
 	bool empty() const noexcept { return _value._values->empty(); }
 	const value& operator[](size_t index) const { return (*_value._values)[index]; }
 
 private:
-	array(const value& v) : _value(v.is_array() ? v : value::empty_array()) { }
-
 	const value& _value;
-	friend class value;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -249,75 +243,34 @@ private:
 	value _root;
 
 	friend class value;
+	friend class object;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool value::get_bool(bool defaultValue) const noexcept
-{
-	return is_boolean() ? _boolean : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline int value::get_int(int defaultValue) const noexcept
-{
-	return is_number() ? static_cast<int>(_number) : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline float value::get_float(float defaultValue) const noexcept
-{
-	return is_number() ? static_cast<float>(_number) : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline double value::get_double(double defaultValue) const noexcept
-{
-	return is_number() ? _number : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline const char* value::get_c_str(const char* defaultValue) const noexcept
 {
-	return is_string() ? c_str_offset(_offset & ~size_t_msbit) : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline object value::get_object() const noexcept
-{
-	return object(*this);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline array value::get_array() const noexcept
-{
-	return array(*this);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline const char* value::c_str_offset(size_t offset) const noexcept
-{
-	return _doc->_stringBuffer.data() + offset;
+	return is_string() ? (_doc->_stringBuffer.data() + (_offset & ~size_t_msbit)) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::begin() const noexcept
 {
-	return iterator(_value._properties->begin(), _value.c_str_offset(0));
+	return iterator(_value._properties->begin(), _value._doc->_stringBuffer.data());
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::end() const noexcept
 {
-	return iterator(_value._properties->end(), _value.c_str_offset(0));
+	return iterator(_value._properties->end(), _value._doc->_stringBuffer.data());
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::find(std::string_view key) const noexcept
 {
 	auto hash = std::hash<std::string_view>()(key);
-	return iterator(_value._properties->find({ hash }), _value.c_str_offset(0));
+	return iterator(_value._properties->find({ hash }), _value._doc->_stringBuffer.data());
 }
 
 //---------------------------------------------------------------------------------------------------------------------
