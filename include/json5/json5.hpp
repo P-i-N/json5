@@ -287,7 +287,7 @@ inline double value::get_double(double defaultValue) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline const char* value::get_c_str(const char* defaultValue) const noexcept
 {
-	return is_string() ? c_str_offset(_offset) : defaultValue;
+	return is_string() ? c_str_offset(_offset & ~size_t_msbit) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
