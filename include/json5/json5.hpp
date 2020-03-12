@@ -42,56 +42,61 @@ class object;
 class array;
 class document;
 
-enum class value_type : size_t { null, boolean, string, number, object, array };
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class value
+class value final
 {
+	static constexpr size_t size_t_msbit = (static_cast<size_t>(1) << (sizeof(size_t) * 8 - 1));
+
 public:
 	value() noexcept = default;
-	value(bool boolean) noexcept : _type(value_type::boolean), _boolean(boolean) { }
-	value(double number) noexcept : _type(value_type::number), _number(number) { }
-	value(const document& doc, unsigned off) noexcept : _type(value_type::string), _doc(&doc) { }
 
-	value(value&& rValue);
-	~value();
-
-	value_type type() const noexcept { return _type; }
-
-	bool is_null() const noexcept { return _type == value_type::null; }
-	bool is_number() const noexcept { return _type == value_type::number; }
-	bool is_boolean() const noexcept { return _type == value_type::boolean; }
-	bool is_string() const noexcept { return _type == value_type::string; }
-	bool is_object() const noexcept { return _type == value_type::object; }
-	bool is_array() const noexcept { return _type == value_type::array; }
+	bool is_null() const noexcept { return _type == content_type::null; }
+	bool is_number() const noexcept { return _type == content_type::number; }
+	bool is_boolean() const noexcept { return _type == content_type::boolean; }
+	bool is_array() const noexcept { return _type == content_type::values; }
+	bool is_string() const noexcept { return _type >= content_type::last && (_offset & size_t_msbit); }
+	bool is_object() const noexcept { return _type >= content_type::last && !(_offset & size_t_msbit); }
 
 	bool get_bool(bool defaultValue = false) const noexcept;
 	int get_int(int defaultValue = 0) const noexcept;
 	float get_float(float defaultValue = 0.0f) const noexcept;
 	double get_double(double defaultValue = 0.0) const noexcept;
 	const char* get_c_str(const char* defaultValue = "") const noexcept;
+	object get_object() const noexcept;
+	array get_array() const noexcept;
 
-	const object& get_object() const noexcept;
-	const array& get_array() const noexcept;
+private:
+	using properties_t = std::unordered_map<detail::hashed_string_ref, value>;
+	using values_t = std::vector<value>;
 
-	static const value& null_instance()
+	enum content_type : size_t { null = 0, boolean, number, properties, values, last };
+
+	value(bool val) noexcept : _type(content_type::boolean), _boolean(val) { }
+	value(double val) noexcept : _type(content_type::number), _number(val) { }
+	value(const document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
+	value(const document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
+	value(const document* doc, values_t& vals) : _type(content_type::values), _values(&vals) { }
+
+	static const value& empty_object()
 	{
-		static value nullInstance;
-		return nullInstance;
+		static properties_t emptyProperties;
+		static value emptyObject(nullptr, emptyProperties);
+		return emptyObject;
 	}
 
-protected:
-	value(const document& doc, value_type type);
+	static const value& empty_array()
+	{
+		static values_t emptyValues;
+		static value emptyArray(nullptr, emptyValues);
+		return emptyArray;
+	}
 
 	const char* c_str_offset(size_t offset) const noexcept;
 
-	using properties = std::unordered_map<detail::hashed_string_ref, value>;
-	using values = std::vector<value>;
-
 	union
 	{
-		value_type _type = value_type::null;
+		content_type _type = content_type::null;
 		const document* _doc;
 	};
 
@@ -100,24 +105,24 @@ protected:
 		bool _boolean;
 		double _number;
 		size_t _offset;
-		properties* _properties;
-		values* _values;
+		properties_t* _properties;
+		values_t* _values;
 	};
 
 	friend class document;
+	friend class object;
+	friend class array;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class object final : public value
+class object final
 {
 public:
-	object(const document& doc): value(doc, value_type::object) { }
-
 	class iterator final
 	{
 	public:
-		iterator(properties::const_iterator iter, const char *strBuff): _iter(iter), _stringBuffer(strBuff) { }
+		iterator(value::properties_t::const_iterator iter, const char *strBuff): _iter(iter), _stringBuffer(strBuff) { }
 		bool operator==(const iterator& other) const noexcept { return _iter == other._iter; }
 		iterator& operator++() { ++_iter; return *this; }
 
@@ -127,47 +132,37 @@ public:
 		}
 
 	private:
-		properties::const_iterator _iter;
+		value::properties_t::const_iterator _iter;
 		const char* _stringBuffer;
 	};
 
 	iterator begin() const noexcept;
 	iterator end() const noexcept;
 	iterator find(std::string_view key) const noexcept;
-	bool empty() const noexcept { return _properties->empty(); }
+	bool empty() const noexcept { return _value._properties->empty(); }
 	bool contains(std::string_view key) const noexcept;
 
-	static const object& empty_instance()
-	{
-		static object emptyInstance;
-		return emptyInstance;
-	}
-
 private:
-	object() = default;
-	friend class document;
+	object(const value& v) : _value(v.is_object() ? v : value::empty_object()) { }
+
+	const value& _value;
+	friend class value;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class array final : public value
+class array final
 {
 public:
-	array(const document& doc) : value(doc, value_type::array) { }
-
-	size_t size() const noexcept { return _values->size(); }
-	bool empty() const noexcept { return _values->empty(); }
-	const value& operator[](size_t index) const { return (*_values)[index]; }
-
-	static const array& empty_instance()
-	{
-		static array emptyInstance;
-		return emptyInstance;
-	}
+	size_t size() const noexcept { return _value._values->size(); }
+	bool empty() const noexcept { return _value._values->empty(); }
+	const value& operator[](size_t index) const { return (*_value._values)[index]; }
 
 private:
-	array() = default;
-	friend class document;
+	array(const value& v) : _value(v.is_array() ? v : value::empty_array()) { }
+
+	const value& _value;
+	friend class value;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -207,7 +202,7 @@ public:
 
 	error parse(const std::string& str) { return parse(context{ std::istringstream(str) }); }
 
-	const value& root() const noexcept { return _root ? (*_root) : value::null_instance(); }
+	const value& root() const noexcept { return _root; }
 
 private:
 	struct context final
@@ -238,10 +233,9 @@ private:
 	};
 
 	error parse(context& ctx);
-	error parse(context& ctx, std::unique_ptr<value>& result);
-
-	error parse(context& ctx, object& result);
-	error parse(context& ctx, array& result);
+	error parse_value(context& ctx, value &result);
+	error parse_properties(context& ctx, value::properties_t& result);
+	error parse_values(context& ctx, value::values_t& result);
 
 	enum class token_type
 	{
@@ -258,37 +252,15 @@ private:
 	error parse_literal(context& ctx, token_type& result);
 
 	std::vector<char> _stringBuffer;
+	std::vector<std::unique_ptr<value::properties_t>> _propertiesBuffer;
+	std::vector<std::unique_ptr<value::values_t>> _valuesBuffer;
 
-	std::unique_ptr<value> _root;
+	value _root;
 
 	friend class value;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//---------------------------------------------------------------------------------------------------------------------
-inline value::value(const document& doc, value_type type) : _doc(&doc), _type(type)
-{
-	if (_type == value_type::object)
-		_properties = new properties();
-	else if (_type == value_type::array)
-		_values = new values();
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline value::value(value&& rValue)
-{
-
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline value::~value()
-{
-	if (_type == value_type::object)
-		delete _properties;
-	else if (_type == value_type::array)
-		delete _values;
-}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline bool value::get_bool(bool defaultValue) const noexcept
@@ -321,15 +293,15 @@ inline const char* value::get_c_str(const char* defaultValue) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline const object& value::get_object() const noexcept
+inline object value::get_object() const noexcept
 {
-	return is_object() ? static_cast<const object&>(*this) : object::empty_instance();
+	return object(*this);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline const array& value::get_array() const noexcept
+inline array value::get_array() const noexcept
 {
-	return is_array() ? static_cast<const array&>(*this) : array::empty_instance();
+	return array(*this);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -341,27 +313,27 @@ inline const char* value::c_str_offset(size_t offset) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::begin() const noexcept
 {
-	return iterator(_properties->begin(), c_str_offset(0));
+	return iterator(_value._properties->begin(), _value.c_str_offset(0));
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::end() const noexcept
 {
-	return iterator(_properties->end(), c_str_offset(0));
+	return iterator(_value._properties->end(), _value.c_str_offset(0));
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::find(std::string_view key) const noexcept
 {
 	auto hash = std::hash<std::string_view>()(key);
-	return iterator(_properties->find({ hash }), c_str_offset(0));
+	return iterator(_value._properties->find({ hash }), _value.c_str_offset(0));
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline bool object::contains(std::string_view key) const noexcept
 {
 	auto hash = std::hash<std::string_view>()(key);
-	return _properties->contains({ hash });
+	return _value._properties->contains({ hash });
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -373,7 +345,7 @@ inline document::document()
 //---------------------------------------------------------------------------------------------------------------------
 inline error document::parse(context& ctx)
 {
-	_root.reset();
+	_root = value();
 
 	_stringBuffer.reserve(8192); // Reserve 8kB for strings
 	_stringBuffer.clear();
@@ -387,8 +359,8 @@ inline error document::parse(context& ctx)
 	{
 		case token_type::array_begin:
 		{
-			auto rootArray = std::make_unique<array>(*this);
-			if (auto err = parse(ctx, *rootArray))
+			auto rootArray = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
+			if (auto err = parse_values(ctx, *rootArray._values))
 				return err;
 
 			_root = std::move(rootArray);
@@ -397,8 +369,8 @@ inline error document::parse(context& ctx)
 
 		case token_type::object_begin:
 		{
-			auto rootObject = std::make_unique<object>(*this);
-			if (auto err = parse(ctx, *rootObject))
+			auto rootObject = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
+			if (auto err = parse_properties(ctx, *rootObject._properties))
 				return err;
 
 			_root = std::move(rootObject);
@@ -413,7 +385,7 @@ inline error document::parse(context& ctx)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error document::parse(context& ctx, std::unique_ptr<value>& result)
+inline error document::parse_value(context& ctx, value& result)
 {
 	token_type tt = token_type::unknown;
 	if (auto err = peek_next_token(ctx, tt))
@@ -426,7 +398,7 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 			if (double number = 0.0; auto err = parse_number(ctx, number))
 				return err;
 			else
-				result = std::make_unique<value>(number);
+				result = value(number);
 		}
 		break;
 
@@ -435,7 +407,7 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 			if (unsigned offset = 0; auto err = parse_string(ctx, offset))
 				return err;
 			else
-				result = std::make_unique<value>(*this, offset);
+				result = value(this, offset);
 		}
 		break;
 
@@ -446,11 +418,11 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 			else
 			{
 				if (lit == token_type::literal_true)
-					result = std::make_unique<value>(true);
+					result = value(true);
 				else if (lit == token_type::literal_false)
-					result = std::make_unique<value>(false);
+					result = value(false);
 				else if (lit == token_type::literal_null)
-					result = std::make_unique<value>();
+					result = value();
 				else
 					return ctx.make_error(error::invalid_literal);
 			}
@@ -459,7 +431,8 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 
 		case token_type::object_begin:
 		{
-			if (auto objectResult = std::make_unique<object>(*this); auto err = parse(ctx, *objectResult))
+			auto objectResult = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
+			if (auto err = parse_properties(ctx, *objectResult._properties))
 				return err;
 			else
 				result = std::move(objectResult);
@@ -468,8 +441,8 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 
 		case token_type::array_begin:
 		{
-			
-			if (auto arrayResult = std::make_unique<array>(*this); auto err = parse(ctx, *arrayResult))
+			auto arrayResult = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
+			if (auto err = parse_values(ctx, *arrayResult._values))
 				return err;
 			else
 				result = std::move(arrayResult);
@@ -484,7 +457,7 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error document::parse(context& ctx, object& result)
+inline error document::parse_properties(context& ctx, value::properties_t& result)
 {
 	ctx.next(); // Consume '{'
 
@@ -536,8 +509,8 @@ inline error document::parse(context& ctx, object& result)
 
 		ctx.next(); // Consume ':'
 
-		std::unique_ptr<value> valuePtr;
-		if (auto err = parse(ctx, valuePtr))
+		value newValue;
+		if (auto err = parse_value(ctx, newValue))
 			return err;
 
 		detail::hashed_string_ref hashedKey;
@@ -546,7 +519,7 @@ inline error document::parse(context& ctx, object& result)
 		auto sv = std::string_view(_stringBuffer.data() + hashedKey.offset);
 		hashedKey.hash = std::hash<std::string_view>()(sv);
 
-		result._properties->insert({ hashedKey, std::move(valuePtr) });
+		result.insert({ hashedKey, std::move(newValue) });
 		expectComma = true;
 	}
 
@@ -554,7 +527,7 @@ inline error document::parse(context& ctx, object& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error document::parse(context& ctx, array& result)
+inline error document::parse_values(context& ctx, value::values_t& result)
 {
 	ctx.next(); // Consume '['
 
@@ -581,11 +554,11 @@ inline error document::parse(context& ctx, array& result)
 			continue;
 		}
 
-		std::unique_ptr<value> valuePtr;
-		if (auto err = parse(ctx, valuePtr))
+		value newValue;
+		if (auto err = parse_value(ctx, newValue))
 			return err;
 
-		result._values.push_back(std::move(valuePtr));
+		result.push_back(std::move(newValue));
 		expectComma = true;
 	}
 
