@@ -1,4 +1,5 @@
 #include <json5/json5.hpp>
+#include <json5/json5_reflect.hpp>
 
 #include <iostream>
 
@@ -6,7 +7,6 @@
 int main(int argc, char* argv[])
 {
 	json5::document doc;
-	doc.parse("{ text: 'Hello, world!', arr: [ 1, 2, 3 ] }");
 
 	if (auto err = doc.parse("{ text: 'Hello, world!', arr: [ 1, 2, 3 ] }"))
 	{
