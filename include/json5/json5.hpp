@@ -37,13 +37,6 @@ template <> struct hash<json5::detail::hashed_string_ref>
 
 namespace json5 {
 
-/* Forward declarations*/
-class object;
-class array;
-class document;
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 class value final
 {
 	static constexpr size_t size_t_msbit = (static_cast<size_t>(1) << (sizeof(size_t) * 8 - 1));
@@ -51,20 +44,20 @@ class value final
 public:
 	value() noexcept = default;
 
-	bool is_null() const noexcept { return _type == content_type::null; }
-	bool is_boolean() const noexcept { return _type == content_type::boolean; }
-	bool is_number() const noexcept { return _type == content_type::number; }
-	bool is_array() const noexcept { return _type == content_type::values; }
-	bool is_string() const noexcept { return _type >= content_type::last && (_offset & size_t_msbit); }
-	bool is_object() const noexcept { return _type >= content_type::last && !(_offset & size_t_msbit); }
+	bool is_null() const noexcept { return _contentType == content_type::null; }
+	bool is_boolean() const noexcept { return _contentType == content_type::boolean; }
+	bool is_number() const noexcept { return _contentType == content_type::number; }
+	bool is_array() const noexcept { return _contentType == content_type::values; }
+	bool is_string() const noexcept { return _contentType >= content_type::last && (_offset & size_t_msbit); }
+	bool is_object() const noexcept { return _contentType >= content_type::last && !(_offset & size_t_msbit); }
 
 	bool get_bool(bool defaultValue = false) const noexcept;
 	int get_int(int defaultValue = 0) const noexcept;
 	float get_float(float defaultValue = 0.0f) const noexcept;
 	double get_double(double defaultValue = 0.0) const noexcept;
 	const char* get_c_str(const char* defaultValue = "") const noexcept;
-	object get_object() const noexcept;
-	array get_array() const noexcept;
+	class object get_object() const noexcept;
+	class array get_array() const noexcept;
 
 private:
 	using properties_t = std::unordered_map<detail::hashed_string_ref, value>;
@@ -72,11 +65,11 @@ private:
 
 	enum class content_type : size_t { null = 0, boolean, number, properties, values, last };
 
-	value(bool val) noexcept : _type(content_type::boolean), _boolean(val) { }
-	value(double val) noexcept : _type(content_type::number), _number(val) { }
-	value(const document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
-	value(const document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
-	value(const document* doc, values_t& vals) : _type(content_type::values), _values(&vals) { }
+	value(bool val) noexcept : _contentType(content_type::boolean), _boolean(val) { }
+	value(double val) noexcept : _contentType(content_type::number), _number(val) { }
+	value(const class document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
+	value(const class document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
+	value(const class document* doc, values_t& vals) : _contentType(content_type::values), _values(&vals) { }
 
 	static const value& empty_object()
 	{
@@ -96,8 +89,8 @@ private:
 
 	union
 	{
-		content_type _type = content_type::null;
-		const document* _doc;
+		content_type _contentType = content_type::null;
+		const class document* _doc;
 	};
 
 	union
@@ -350,21 +343,17 @@ inline error document::parse(context& ctx)
 	{
 		case token_type::array_begin:
 		{
-			auto rootArray = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
-			if (auto err = parse_values(ctx, *rootArray._values))
+			_root = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
+			if (auto err = parse_values(ctx, *_root._values))
 				return err;
-
-			_root = std::move(rootArray);
 		}
 		break;
 
 		case token_type::object_begin:
 		{
-			auto rootObject = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
-			if (auto err = parse_properties(ctx, *rootObject._properties))
+			_root = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
+			if (auto err = parse_properties(ctx, *_root._properties))
 				return err;
-
-			_root = std::move(rootObject);
 		}
 		break;
 
@@ -422,21 +411,17 @@ inline error document::parse_value(context& ctx, value& result)
 
 		case token_type::object_begin:
 		{
-			auto objectResult = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
-			if (auto err = parse_properties(ctx, *objectResult._properties))
+			result = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
+			if (auto err = parse_properties(ctx, *result._properties))
 				return err;
-			else
-				result = std::move(objectResult);
 		}
 		break;
 
 		case token_type::array_begin:
 		{
-			auto arrayResult = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
-			if (auto err = parse_values(ctx, *arrayResult._values))
+			result = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
+			if (auto err = parse_values(ctx, *result._values))
 				return err;
-			else
-				result = std::move(arrayResult);
 		}
 		break;
 
@@ -479,14 +464,12 @@ inline error document::parse_properties(context& ctx, value::properties_t& resul
 				return { error::none };
 
 			case token_type::comma:
-			{
 				if (!expectComma)
 					return ctx.make_error(error::syntax_error);
 
 				ctx.next(); // Consume ','
 				expectComma = false;
 				continue;
-			}
 
 			default:
 				return expectComma ? ctx.make_error(error::comma_expected) : ctx.make_error(error::syntax_error);
@@ -510,7 +493,7 @@ inline error document::parse_properties(context& ctx, value::properties_t& resul
 		auto sv = std::string_view(_stringBuffer.data() + hashedKey.offset);
 		hashedKey.hash = std::hash<std::string_view>()(sv);
 
-		result.insert({ hashedKey, std::move(newValue) });
+		result.insert({ hashedKey, newValue });
 		expectComma = true;
 	}
 
@@ -545,11 +528,9 @@ inline error document::parse_values(context& ctx, value::values_t& result)
 			continue;
 		}
 
-		value newValue;
-		if (auto err = parse_value(ctx, newValue))
+		if (auto err = parse_value(ctx, result.emplace_back()))
 			return err;
 
-		result.push_back(std::move(newValue));
 		expectComma = true;
 	}
 
@@ -579,34 +560,21 @@ inline error document::peek_next_token(context& ctx, token_type& result)
 
 			parsingComment = true;
 		}
-		else if (ch == '{')
+		else if (strchr("{}[]:,", ch))
 		{
-			result = token_type::object_begin;
-			return { error::none };
-		}
-		else if (ch == '}')
-		{
-			result = token_type::object_end;
-			return { error::none };
-		}
-		else if (ch == '[')
-		{
-			result = token_type::array_begin;
-			return { error::none };
-		}
-		else if (ch == ']')
-		{
-			result = token_type::array_end;
-			return { error::none };
-		}
-		else if (ch == ':')
-		{
-			result = token_type::colon;
-			return { error::none };
-		}
-		else if (ch == ',')
-		{
-			result = token_type::comma;
+			if (ch == '{')
+				result = token_type::object_begin;
+			else if (ch == '}')
+				result = token_type::object_end;
+			else if (ch == '[')
+				result = token_type::array_begin;
+			else if (ch == ']')
+				result = token_type::array_end;
+			else if (ch == ':')
+				result = token_type::colon;
+			else if (ch == ',')
+				result = token_type::comma;
+
 			return { error::none };
 		}
 		else if (isalpha(ch) || ch == '_')
@@ -715,11 +683,8 @@ inline error document::parse_identifier(context& ctx, unsigned& result)
 			break;
 	}
 
-	if (isString)
-	{
-		if (firstCh != ctx.next()) // Consume '\'' or '"'
-			return ctx.make_error(error::syntax_error);
-	}
+	if (isString && firstCh != ctx.next()) // Consume '\'' or '"'
+		return ctx.make_error(error::syntax_error);
 
 	_stringBuffer.push_back(0);
 	return { error::none };
