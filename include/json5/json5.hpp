@@ -52,8 +52,8 @@ public:
 	value() noexcept = default;
 
 	bool is_null() const noexcept { return _type == content_type::null; }
-	bool is_number() const noexcept { return _type == content_type::number; }
 	bool is_boolean() const noexcept { return _type == content_type::boolean; }
+	bool is_number() const noexcept { return _type == content_type::number; }
 	bool is_array() const noexcept { return _type == content_type::values; }
 	bool is_string() const noexcept { return _type >= content_type::last && (_offset & size_t_msbit); }
 	bool is_object() const noexcept { return _type >= content_type::last && !(_offset & size_t_msbit); }
@@ -70,7 +70,7 @@ private:
 	using properties_t = std::unordered_map<detail::hashed_string_ref, value>;
 	using values_t = std::vector<value>;
 
-	enum content_type : size_t { null = 0, boolean, number, properties, values, last };
+	enum class content_type : size_t { null = 0, boolean, number, properties, values, last };
 
 	value(bool val) noexcept : _type(content_type::boolean), _boolean(val) { }
 	value(double val) noexcept : _type(content_type::number), _number(val) { }
@@ -139,6 +139,7 @@ public:
 	iterator begin() const noexcept;
 	iterator end() const noexcept;
 	iterator find(std::string_view key) const noexcept;
+	size_t size() const noexcept { return _value._properties->size(); }
 	bool empty() const noexcept { return _value._properties->empty(); }
 	bool contains(std::string_view key) const noexcept;
 
@@ -196,13 +197,10 @@ struct error final
 class document final
 {
 public:
-	document();
+	const value& root() const noexcept { return _root; }
 
 	error parse(std::istream& is) { return parse(context{ is }); }
-
 	error parse(const std::string& str) { return parse(context{ std::istringstream(str) }); }
-
-	const value& root() const noexcept { return _root; }
 
 private:
 	struct context final
@@ -337,17 +335,10 @@ inline bool object::contains(std::string_view key) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline document::document()
-{
-
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline error document::parse(context& ctx)
 {
 	_root = value();
 
-	_stringBuffer.reserve(8192); // Reserve 8kB for strings
 	_stringBuffer.clear();
 	_stringBuffer.push_back(0);
 
