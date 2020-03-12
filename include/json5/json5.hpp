@@ -49,12 +49,6 @@ enum class value_type { null, boolean, string, number, object, array };
 class value
 {
 public:
-	static const value& null()
-	{
-		static value nullValue;
-		return nullValue;
-	}
-
 	value(document& doc, value_type type) : _doc(&doc), _type(type) { }
 
 	virtual ~value() = default;
@@ -76,6 +70,12 @@ public:
 	float get_float(float defaultValue = 0.0f) const noexcept;
 	double get_double(double defaultValue = 0.0) const noexcept;
 	const char* get_c_str(const char* defaultValue = "") const noexcept;
+
+	static const value& null_instance()
+	{
+		static value nullInstance;
+		return nullInstance;
+	}
 
 protected:
 	value() = default;
@@ -157,7 +157,15 @@ public:
 	bool empty() const noexcept { return _properties.empty(); }
 	bool contains(std::string_view key) const noexcept;
 
+	static const object& empty_instance()
+	{
+		static object emptyInstance;
+		return emptyInstance;
+	}
+
 private:
+	object() = default;
+
 	property_map _properties;
 	friend class document;
 };
@@ -175,7 +183,15 @@ public:
 	bool empty() const noexcept { return _values.empty(); }
 	const value& operator[](size_t index) const { return *(_values[index]); }
 
+	static const array& empty_instance()
+	{
+		static array emptyInstance;
+		return emptyInstance;
+	}
+
 private:
+	array() = default;
+
 	values _values;
 	friend class document;
 };
@@ -216,7 +232,7 @@ public:
 
 	error parse(const std::string& str) { return parse(context{ std::istringstream(str) }); }
 
-	const value& root() const noexcept { return _root ? (*_root) : value::null(); }
+	const value& root() const noexcept { return _root ? (*_root) : value::null_instance(); }
 
 private:
 	struct context final
@@ -271,8 +287,16 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline const object& value::get_object() const noexcept { return static_cast<const object&>(*this); }
-inline const array& value::get_array() const noexcept { return static_cast<const array&>(*this); }
+inline const object& value::get_object() const noexcept
+{
+	return is_object() ? static_cast<const object&>(*this) : object::empty_instance();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline const array& value::get_array() const noexcept
+{
+	return is_array() ? static_cast<const array&>(*this) : array::empty_instance();
+}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline bool value::get_bool(bool defaultValue) const noexcept
