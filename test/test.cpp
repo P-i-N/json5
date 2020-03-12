@@ -6,9 +6,12 @@
 //---------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
+	int sz = sizeof(json5::value);
+	int objSize = sizeof(json5::object);
+
 	json5::document doc;
 
-	if (auto err = doc.parse("{ text: 'Hello, world!', arr: [ 1, 2, 3 ] }"))
+	if (auto err = doc.parse("{ id: null }"))
 	{
 		printf("Error at line %d, column %d!\n", err.line, err.column);
 	}

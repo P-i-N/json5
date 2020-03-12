@@ -42,16 +42,20 @@ class object;
 class array;
 class document;
 
-enum class value_type { null, boolean, string, number, object, array };
+enum class value_type : size_t { null, boolean, string, number, object, array };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class value
 {
 public:
-	value(document& doc, value_type type) : _doc(&doc), _type(type) { }
+	value() noexcept = default;
+	value(bool boolean) noexcept : _type(value_type::boolean), _boolean(boolean) { }
+	value(double number) noexcept : _type(value_type::number), _number(number) { }
+	value(const document& doc, unsigned off) noexcept : _type(value_type::string), _doc(&doc) { }
 
-	virtual ~value() = default;
+	value(value&& rValue);
+	~value();
 
 	value_type type() const noexcept { return _type; }
 
@@ -62,14 +66,14 @@ public:
 	bool is_object() const noexcept { return _type == value_type::object; }
 	bool is_array() const noexcept { return _type == value_type::array; }
 
-	const object& get_object() const noexcept;
-	const array& get_array() const noexcept;
-
 	bool get_bool(bool defaultValue = false) const noexcept;
 	int get_int(int defaultValue = 0) const noexcept;
 	float get_float(float defaultValue = 0.0f) const noexcept;
 	double get_double(double defaultValue = 0.0) const noexcept;
 	const char* get_c_str(const char* defaultValue = "") const noexcept;
+
+	const object& get_object() const noexcept;
+	const array& get_array() const noexcept;
 
 	static const value& null_instance()
 	{
@@ -78,50 +82,28 @@ public:
 	}
 
 protected:
-	value() = default;
+	value(const document& doc, value_type type);
 
 	const char* c_str_offset(size_t offset) const noexcept;
 
-	document* _doc = nullptr;
-	value_type _type = value_type::null;
-};
+	using properties = std::unordered_map<detail::hashed_string_ref, value>;
+	using values = std::vector<value>;
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	union
+	{
+		value_type _type = value_type::null;
+		const document* _doc;
+	};
 
-class number final : public value
-{
-public:
-	number(document& doc): value(doc, value_type::number) { }
-	double get_value() const noexcept { return _double; }
+	union
+	{
+		bool _boolean;
+		double _number;
+		size_t _offset;
+		properties* _properties;
+		values* _values;
+	};
 
-private:
-	double _double = 0.0;
-	friend class document;
-};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-class boolean final : public value
-{
-public:
-	boolean(document& doc): value(doc, value_type::boolean) { }
-	bool get_value() const noexcept { return _value; }
-
-private:
-	bool _value = false;
-	friend class document;
-};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-class string final : public value
-{
-public:
-	string(document& doc): value(doc, value_type::string) { }
-	const char *get_value() const noexcept { return c_str_offset(_stringOffset); }
-
-private:
-	size_t _stringOffset = 0;
 	friend class document;
 };
 
@@ -129,32 +111,30 @@ private:
 
 class object final : public value
 {
-	using property_map = std::unordered_map<detail::hashed_string_ref, std::unique_ptr<value>>;
-
 public:
-	object(document& doc): value(doc, value_type::object) { }
+	object(const document& doc): value(doc, value_type::object) { }
 
 	class iterator final
 	{
 	public:
-		iterator(property_map::const_iterator iter, const char *strBuff): _iter(iter), _stringBuffer(strBuff) { }
+		iterator(properties::const_iterator iter, const char *strBuff): _iter(iter), _stringBuffer(strBuff) { }
 		bool operator==(const iterator& other) const noexcept { return _iter == other._iter; }
 		iterator& operator++() { ++_iter; return *this; }
 
 		std::pair<const char *, const value&> operator*() const
 		{
-			return { _stringBuffer + _iter->first.offset, *_iter->second };
+			return { _stringBuffer + _iter->first.offset, _iter->second };
 		}
 
 	private:
-		property_map::const_iterator _iter;
+		properties::const_iterator _iter;
 		const char* _stringBuffer;
 	};
 
 	iterator begin() const noexcept;
 	iterator end() const noexcept;
 	iterator find(std::string_view key) const noexcept;
-	bool empty() const noexcept { return _properties.empty(); }
+	bool empty() const noexcept { return _properties->empty(); }
 	bool contains(std::string_view key) const noexcept;
 
 	static const object& empty_instance()
@@ -165,8 +145,6 @@ public:
 
 private:
 	object() = default;
-
-	property_map _properties;
 	friend class document;
 };
 
@@ -174,14 +152,12 @@ private:
 
 class array final : public value
 {
-	using values = std::vector<std::unique_ptr<value>>;
-
 public:
-	array(document& doc) : value(doc, value_type::array) { }
+	array(const document& doc) : value(doc, value_type::array) { }
 
-	size_t size() const noexcept { return _values.size(); }
-	bool empty() const noexcept { return _values.empty(); }
-	const value& operator[](size_t index) const { return *(_values[index]); }
+	size_t size() const noexcept { return _values->size(); }
+	bool empty() const noexcept { return _values->empty(); }
+	const value& operator[](size_t index) const { return (*_values)[index]; }
 
 	static const array& empty_instance()
 	{
@@ -191,8 +167,6 @@ public:
 
 private:
 	array() = default;
-
-	values _values;
 	friend class document;
 };
 
@@ -206,6 +180,7 @@ struct error final
 		invalid_root,
 		unexpected_end,
 		syntax_error,
+		invalid_literal,
 		comma_expected,
 		boolean_expected,
 		number_expected,
@@ -264,18 +239,23 @@ private:
 
 	error parse(context& ctx);
 	error parse(context& ctx, std::unique_ptr<value>& result);
+
 	error parse(context& ctx, object& result);
-	error parse(context& ctx, number& result);
-	error parse(context& ctx, string& result);
 	error parse(context& ctx, array& result);
 
 	enum class token_type
 	{
-		unknown, identifier, string, number, colon, comma, object_begin, object_end, array_begin, array_end
+		unknown, identifier, literal, string, number, colon, comma,
+		object_begin, object_end, array_begin, array_end,
+		literal_true, literal_false, literal_null
 	};
 
 	error peek_next_token(context& ctx, token_type& result);
-	error parse_identifier(context& ctx, size_t& result);
+
+	error parse_number(context& ctx, double& result);
+	error parse_string(context& ctx, unsigned& result);
+	error parse_identifier(context& ctx, unsigned& result);
+	error parse_literal(context& ctx, token_type& result);
 
 	std::vector<char> _stringBuffer;
 
@@ -285,6 +265,60 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value::value(const document& doc, value_type type) : _doc(&doc), _type(type)
+{
+	if (_type == value_type::object)
+		_properties = new properties();
+	else if (_type == value_type::array)
+		_values = new values();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value::value(value&& rValue)
+{
+
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value::~value()
+{
+	if (_type == value_type::object)
+		delete _properties;
+	else if (_type == value_type::array)
+		delete _values;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline bool value::get_bool(bool defaultValue) const noexcept
+{
+	return is_boolean() ? _boolean : defaultValue;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline int value::get_int(int defaultValue) const noexcept
+{
+	return is_number() ? static_cast<int>(_number) : defaultValue;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline float value::get_float(float defaultValue) const noexcept
+{
+	return is_number() ? static_cast<float>(_number) : defaultValue;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline double value::get_double(double defaultValue) const noexcept
+{
+	return is_number() ? _number : defaultValue;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline const char* value::get_c_str(const char* defaultValue) const noexcept
+{
+	return is_string() ? c_str_offset(_offset) : defaultValue;
+}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline const object& value::get_object() const noexcept
@@ -299,36 +333,6 @@ inline const array& value::get_array() const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool value::get_bool(bool defaultValue) const noexcept
-{
-	return is_boolean() ? static_cast<const boolean&>(*this).get_value() : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline int value::get_int(int defaultValue) const noexcept
-{
-	return is_number() ? static_cast<int>(static_cast<const number&>(*this).get_value()) : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline float value::get_float(float defaultValue) const noexcept
-{
-	return is_number() ? static_cast<float>(static_cast<const number&>(*this).get_value()) : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline double value::get_double(double defaultValue) const noexcept
-{
-	return is_number() ? static_cast<double>(static_cast<const number&>(*this).get_value()) : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline const char* value::get_c_str(const char* defaultValue) const noexcept
-{
-	return is_string() ? static_cast<const string&>(*this).get_value() : defaultValue;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline const char* value::c_str_offset(size_t offset) const noexcept
 {
 	return _doc->_stringBuffer.data() + offset;
@@ -337,27 +341,27 @@ inline const char* value::c_str_offset(size_t offset) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::begin() const noexcept
 {
-	return iterator(_properties.begin(), c_str_offset(0));
+	return iterator(_properties->begin(), c_str_offset(0));
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::end() const noexcept
 {
-	return iterator(_properties.end(), c_str_offset(0));
+	return iterator(_properties->end(), c_str_offset(0));
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline object::iterator object::find(std::string_view key) const noexcept
 {
 	auto hash = std::hash<std::string_view>()(key);
-	return iterator(_properties.find({ hash }), c_str_offset(0));
+	return iterator(_properties->find({ hash }), c_str_offset(0));
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline bool object::contains(std::string_view key) const noexcept
 {
 	auto hash = std::hash<std::string_view>()(key);
-	return _properties.contains({ hash });
+	return _properties->contains({ hash });
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -419,46 +423,64 @@ inline error document::parse(context& ctx, std::unique_ptr<value>& result)
 	{
 		case token_type::number:
 		{
-			auto numberResult = std::make_unique<number>(*this);
-			if (auto err = parse(ctx, *numberResult))
+			if (double number = 0.0; auto err = parse_number(ctx, number))
 				return err;
-
-			result = std::move(numberResult);
-			return { error::none };
+			else
+				result = std::make_unique<value>(number);
 		}
+		break;
 
 		case token_type::string:
 		{
-			auto stringResult = std::make_unique<string>(*this);
-			if (auto err = parse(ctx, *stringResult))
+			if (unsigned offset = 0; auto err = parse_string(ctx, offset))
 				return err;
-
-			result = std::move(stringResult);
-			return { error::none };
+			else
+				result = std::make_unique<value>(*this, offset);
 		}
+		break;
+
+		case token_type::identifier:
+		{
+			if (token_type lit = token_type::unknown; auto err = parse_literal(ctx, lit))
+				return err;
+			else
+			{
+				if (lit == token_type::literal_true)
+					result = std::make_unique<value>(true);
+				else if (lit == token_type::literal_false)
+					result = std::make_unique<value>(false);
+				else if (lit == token_type::literal_null)
+					result = std::make_unique<value>();
+				else
+					return ctx.make_error(error::invalid_literal);
+			}
+		}
+		break;
 
 		case token_type::object_begin:
 		{
-			auto objectResult = std::make_unique<object>(*this);
-			if (auto err = parse(ctx, *objectResult))
+			if (auto objectResult = std::make_unique<object>(*this); auto err = parse(ctx, *objectResult))
 				return err;
-
-			result = std::move(objectResult);
-			return { error::none };
+			else
+				result = std::move(objectResult);
 		}
+		break;
 
 		case token_type::array_begin:
 		{
-			auto arrayResult = std::make_unique<array>(*this);
-			if (auto err = parse(ctx, *arrayResult))
+			
+			if (auto arrayResult = std::make_unique<array>(*this); auto err = parse(ctx, *arrayResult))
 				return err;
-
-			result = std::move(arrayResult);
-			return { error::none };
+			else
+				result = std::move(arrayResult);
 		}
+		break;
+
+		default:
+			return ctx.make_error(error::syntax_error);
 	}
 
-	return ctx.make_error(error::syntax_error);
+	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -473,7 +495,7 @@ inline error document::parse(context& ctx, object& result)
 		if (auto err = peek_next_token(ctx, tt))
 			return err;
 
-		size_t keyOffset;
+		unsigned keyOffset;
 
 		switch (tt)
 		{
@@ -524,67 +546,11 @@ inline error document::parse(context& ctx, object& result)
 		auto sv = std::string_view(_stringBuffer.data() + hashedKey.offset);
 		hashedKey.hash = std::hash<std::string_view>()(sv);
 
-		result._properties.insert({ hashedKey, std::move(valuePtr) });
+		result._properties->insert({ hashedKey, std::move(valuePtr) });
 		expectComma = true;
 	}
 
 	return ctx.make_error(error::unexpected_end);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse(context& ctx, number& result)
-{
-	size_t offset = _stringBuffer.size();
-	size_t length = 0;
-
-	while (!ctx.eof())
-	{
-		_stringBuffer.push_back(ctx.next());
-		++length;
-
-		char ch = ctx.peek();
-		if (!isdigit(ch))
-			break;
-	}
-
-	_stringBuffer.push_back(0);
-
-	auto convResult = std::from_chars(
-		_stringBuffer.data() + offset,
-		_stringBuffer.data() + offset + length,
-		result._double);
-
-	if (convResult.ec != std::errc())
-		return ctx.make_error(error::syntax_error);
-
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse(context& ctx, string& result)
-{
-	bool singleQuoted = ctx.peek() == '\'';
-	ctx.next(); // Consume '\'' or '"'
-
-	result._stringOffset = _stringBuffer.size();
-
-	while (!ctx.eof())
-	{
-		char ch = ctx.peek();
-		if ((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"'))
-		{
-			ctx.next(); // Consume '\'' or '"'
-			break;
-		}
-
-		_stringBuffer.push_back(ctx.next());
-	}
-
-	if (ctx.eof())
-		return ctx.make_error(error::unexpected_end);
-
-	_stringBuffer.push_back(0);
-	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -704,9 +670,65 @@ inline error document::peek_next_token(context& ctx, token_type& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_identifier(context& ctx, size_t& result)
+inline error document::parse_number(context& ctx, double& result)
 {
-	result = _stringBuffer.size();
+	size_t offset = _stringBuffer.size();
+	size_t length = 0;
+
+	while (!ctx.eof())
+	{
+		_stringBuffer.push_back(ctx.next());
+		++length;
+
+		char ch = ctx.peek();
+		if (!isdigit(ch))
+			break;
+	}
+
+	_stringBuffer.push_back(0);
+
+	auto convResult = std::from_chars(
+		_stringBuffer.data() + offset,
+		_stringBuffer.data() + offset + length,
+		result);
+
+	if (convResult.ec != std::errc())
+		return ctx.make_error(error::syntax_error);
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error document::parse_string(context& ctx, unsigned& result)
+{
+	bool singleQuoted = ctx.peek() == '\'';
+	ctx.next(); // Consume '\'' or '"'
+
+	result = static_cast<unsigned>(_stringBuffer.size());
+
+	while (!ctx.eof())
+	{
+		char ch = ctx.peek();
+		if ((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"'))
+		{
+			ctx.next(); // Consume '\'' or '"'
+			break;
+		}
+
+		_stringBuffer.push_back(ctx.next());
+	}
+
+	if (ctx.eof())
+		return ctx.make_error(error::unexpected_end);
+
+	_stringBuffer.push_back(0);
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error document::parse_identifier(context& ctx, unsigned& result)
+{
+	result = static_cast<unsigned>(_stringBuffer.size());
 
 	char firstCh = ctx.peek();
 	bool isString = (firstCh == '\'') || (firstCh == '"');
@@ -737,6 +759,48 @@ inline error document::parse_identifier(context& ctx, size_t& result)
 
 	_stringBuffer.push_back(0);
 	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error document::parse_literal(context& ctx, token_type& result)
+{
+	char ch = ctx.peek();
+
+	// "true"
+	if (ch == 't')
+	{
+		ctx.next(); // Consume 't'
+
+		if (ctx.next() == 'r' && ctx.next() == 'u' && ctx.next() == 'e')
+		{
+			result = token_type::literal_true;
+			return { error::none };
+		}
+	}
+	// "false"
+	else if (ch == 'f')
+	{
+		ctx.next(); // Consume 'f'
+
+		if (ctx.next() == 'a' && ctx.next() == 'l' && ctx.next() == 's' && ctx.next() == 'e')
+		{
+			result = token_type::literal_false;
+			return { error::none };
+		}
+	}
+	// "null"
+	else if (ch == 'n')
+	{
+		ctx.next(); // Consume 'n'
+
+		if (ctx.next() == 'u' && ctx.next() == 'l' && ctx.next() == 'l')
+		{
+			result = token_type::literal_null;
+			return { error::none };
+		}
+	}
+
+	return ctx.make_error(error::invalid_literal);
 }
 
 } // namespace json5
