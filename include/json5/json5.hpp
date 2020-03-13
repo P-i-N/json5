@@ -171,6 +171,7 @@ struct error final
 		syntax_error,
 		invalid_literal,
 		comma_expected,
+		colon_expected,
 		boolean_expected,
 		number_expected,
 		string_expected,
@@ -525,7 +526,7 @@ inline error document::parse_properties(context& ctx, value::properties_t& resul
 			return err;
 
 		if (tt != token_type::colon)
-			return ctx.make_error(error::syntax_error);
+			return ctx.make_error(error::colon_expected);
 
 		ctx.next(); // Consume ':'
 
