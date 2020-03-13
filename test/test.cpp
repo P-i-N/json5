@@ -9,7 +9,7 @@ void PrintJSONValue(const json5::value& value, int depth = 0)
 	if (value.is_null())
 		std::cout << "null";
 	else if (value.is_boolean())
-		std::cout << value.get_bool();
+		std::cout << (value.get_bool() ? "true" : "false");
 	else if (value.is_number())
 		std::cout << value.get_int();
 	else if (value.is_string())
@@ -58,15 +58,19 @@ int main(int argc, char* argv[])
 {
 	int sz = sizeof(json5::value);
 	int objSize = sizeof(json5::object);
+	int docSize = sizeof(json5::document);
 
 	json5::document doc;
+	json5::from_string("{}", doc);
 
-	if (auto err = doc.parse("{ id: null, //Comment!\narr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!' }"))
+	if (auto err = doc.parse("{ id: null, arr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!', anotherObj: { x: true, y: false, z: null } }"))
 	{
 		printf("Error at line %d, column %d!\n", err.line, err.column);
 	}
 
-	PrintJSONValue(doc.root());
+	json5::document doc2 = doc;
+
+	PrintJSONValue(doc2.root());
 
 	struct Foo
 	{

@@ -12,6 +12,8 @@
 
 namespace json5::detail {
 
+struct reader;
+
 struct hashed_string_ref
 {
 	size_t hash = 0;
@@ -60,6 +62,7 @@ public:
 private:
 	using properties_t = std::unordered_map<detail::hashed_string_ref, value>;
 	using values_t = std::vector<value>;
+	using pointer_map_t = std::unordered_map<size_t, size_t>;
 
 	enum class content_type : size_t { null = 0, boolean, number, properties, values, last };
 
@@ -68,6 +71,8 @@ private:
 	value(const class document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
 	value(const class document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
 	value(const class document* doc, values_t& vals) : _contentType(content_type::values), _values(&vals) { }
+
+	void relink(const class document* newDoc, pointer_map_t* ptrMap = nullptr) noexcept;
 
 	static const value& empty_object()
 	{
@@ -101,6 +106,7 @@ private:
 	friend class document;
 	friend class object;
 	friend class array;
+	friend detail::reader;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -181,15 +187,40 @@ struct error final
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+namespace detail {
+
+struct reader
+{
+	using string_buffer_t = std::vector<char>;
+	using properties_buffer_t = std::vector<std::unique_ptr<value::properties_t>>;
+	using values_buffer_t = std::vector<std::unique_ptr<value::values_t>>;
+
+	reader(document& doc);
+};
+
+} // namespace detail
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class document final
 {
 public:
+	document() = default;
+	document(const document& copy) { assign_copy(copy); }
+	document(document&& rValue) noexcept { assign_rvalue(std::forward<document>(rValue)); }
+
+	document& operator=(const document& copy) { assign_copy(copy); return *this; }
+	document& operator=(document&& rValue) noexcept { assign_rvalue(std::forward<document>(rValue)); return *this; }
+
 	const value& root() const noexcept { return _root; }
 
 	error parse(std::istream& is) { return parse(context{ is }); }
 	error parse(const std::string& str) { return parse(context{ std::istringstream(str) }); }
-
+	
 private:
+	void assign_copy(const document& copy);
+	void assign_rvalue(document&& rValue) noexcept;
+
 	struct context final
 	{
 		std::istream& is;
@@ -198,22 +229,18 @@ private:
 
 		char next()
 		{
-			char ch = is.get();
-
-			++column;
-			if (ch == '\n')
+			if (is.peek() == '\n')
 			{
-				column = 1;
+				column = 0;
 				++line;
 			}
 
-			return ch;
+			++column;
+			return is.get();
 		}
 
 		char peek() { return is.peek(); }
-
 		bool eof() const { return is.eof(); }
-
 		error make_error(int type) const noexcept { return error{ type, line, column }; }
 	};
 
@@ -236,14 +263,15 @@ private:
 	error parse_identifier(context& ctx, unsigned& result);
 	error parse_literal(context& ctx, token_type& result);
 
-	std::vector<char> _stringBuffer;
-	std::vector<std::unique_ptr<value::properties_t>> _propertiesBuffer;
-	std::vector<std::unique_ptr<value::values_t>> _valuesBuffer;
+	detail::reader::string_buffer_t _stringBuffer;
+	detail::reader::properties_buffer_t _propertiesBuffer;
+	detail::reader::values_buffer_t _valuesBuffer;
 
 	value _root;
 
-	friend class value;
-	friend class object;
+	friend value;
+	friend object;
+	friend detail::reader;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -252,6 +280,21 @@ private:
 inline const char* value::get_c_str(const char* defaultValue) const noexcept
 {
 	return is_string() ? (_doc->_stringBuffer.data() + (_offset & ~size_t_msbit)) : defaultValue;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void value::relink(const class document* newDoc, pointer_map_t* ptrMap) noexcept
+{
+	if (_contentType >= content_type::last)
+		_doc = newDoc;
+
+	if (ptrMap)
+	{
+		if (is_array())
+			_values = reinterpret_cast<values_t*>((*ptrMap)[reinterpret_cast<size_t>(_values)]);
+		else if (is_object())
+			_properties = reinterpret_cast<properties_t*>((*ptrMap)[reinterpret_cast<size_t>(_properties)]);
+	}
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -278,6 +321,56 @@ inline bool object::contains(std::string_view key) const noexcept
 {
 	auto hash = std::hash<std::string_view>()(key);
 	return _value._properties->contains({ hash });
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+void document::assign_copy(const document& copy)
+{
+	_stringBuffer = copy._stringBuffer;
+
+	std::unordered_map<size_t, size_t> ptrMapping;
+
+	for (const auto& props : copy._propertiesBuffer)
+	{
+		auto& ptr = _propertiesBuffer.emplace_back(new value::properties_t(*props));
+		ptrMapping.insert({ reinterpret_cast<size_t>(props.get()), reinterpret_cast<size_t>(ptr.get()) });
+	}
+
+	for (const auto& vals : copy._valuesBuffer)
+	{
+		auto& ptr = _valuesBuffer.emplace_back(new value::values_t(*vals));
+		ptrMapping.insert({ reinterpret_cast<size_t>(vals.get()), reinterpret_cast<size_t>(ptr.get()) });
+	}
+
+	_root = copy._root;
+	_root.relink(this, &ptrMapping);
+
+	for (const auto& props : _propertiesBuffer)
+		for (auto& [k, v] : *props)
+			v.relink(this, &ptrMapping);
+
+	for (const auto& vals : _valuesBuffer)
+		for (auto& v : *vals)
+			v.relink(this, &ptrMapping);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+void document::assign_rvalue(document&& rValue) noexcept
+{
+	_stringBuffer = std::move(rValue._stringBuffer);
+	_propertiesBuffer = std::move(rValue._propertiesBuffer);
+	_valuesBuffer = std::move(rValue._valuesBuffer);
+	_root = std::move(rValue._root);
+
+	_root.relink(this);
+
+	for (const auto& props : _propertiesBuffer)
+		for (auto& [k, v] : *props)
+			v.relink(this);
+
+	for (const auto& vals : _valuesBuffer)
+		for (auto& v : *vals)
+			v.relink(this);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -694,6 +787,12 @@ inline error document::parse_literal(context& ctx, token_type& result)
 	}
 
 	return ctx.make_error(error::invalid_literal);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error from_string(const std::string& str, document& doc)
+{
+	return { error::none };
 }
 
 } // namespace json5
