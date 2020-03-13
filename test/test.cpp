@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 
 	json5::document doc;
 
-	if (auto err = doc.parse("{ id: null, // Comment!\narr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!' }"))
+	if (auto err = doc.parse("{ id: null, //Comment!\narr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!' }"))
 	{
 		printf("Error at line %d, column %d!\n", err.line, err.column);
 	}

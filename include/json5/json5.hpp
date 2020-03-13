@@ -493,25 +493,36 @@ inline error document::parse_values(context& ctx, value::values_t& result)
 //---------------------------------------------------------------------------------------------------------------------
 inline error document::peek_next_token(context& ctx, token_type& result)
 {
-	bool parsingComment = false;
+	enum class comment_type { none, line, block } parsingComment = comment_type::none;
 
 	while (!ctx.eof())
 	{
 		char ch = ctx.peek();
 		if (ch == '\n')
-			parsingComment = false;
-		else if (parsingComment || ch <= 32)
 		{
-			/* Do nothing */
+			if (parsingComment == comment_type::line)
+				parsingComment = comment_type::none;
+		}
+		else if (parsingComment != comment_type::none || ch <= 32)
+		{
+			if (parsingComment == comment_type::block && ch == '*')
+			{
+				ctx.next(); // Consume '*'
+
+				if (ctx.peek() == '/')
+					parsingComment = comment_type::none;
+			}
 		}
 		else if (ch == '/')
 		{
-			ctx.next();
+			ctx.next(); // Consume '/'
 
-			if (ctx.peek() != '/')
+			if (ctx.peek() == '/')
+				parsingComment = comment_type::line;
+			else if (ctx.peek() == '*')
+				parsingComment = comment_type::block;
+			else
 				return ctx.make_error(error::syntax_error);
-
-			parsingComment = true;
 		}
 		else if (strchr("{}[]:,", ch))
 		{
