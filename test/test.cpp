@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <map>
 
 //---------------------------------------------------------------------------------------------------------------------
 struct Stopwatch
@@ -107,24 +108,41 @@ int main(int argc, char* argv[])
 		PrintJSONValue(doc.root());
 	}
 
-	struct Foo
+	/// Reflection test
 	{
-		int x = 0;
-		int y = 0;
-		int z = 0;
+		struct Bar
+		{
+			std::string name;
+			int age = 0;
 
-		JSON5_REFLECT(x, y, z)
-	};
+			JSON5_REFLECT(name, age)
+			bool operator==(const Bar& o) const noexcept { return make_tuple() == o.make_tuple(); }
+		};
 
-	Foo f;
-	f.x = 123;
-	f.y = 456;
-	f.z = 789;
+		struct Foo
+		{
+			int x = 123;
+			float y = 456.0f;
+			bool z = true;
+			std::string text = "Hello, world!";
+			std::vector<int> numbers = { 1, 2, 3, 4, 5 };
+			std::map<std::string, Bar> barMap = { { "x", { "a", 1 } }, { "y", { "b", 2 } }, { "z", { "c", 3 } } };
 
-	std::cout << json5::to_string(f) << std::endl;
+			JSON5_REFLECT(x, y, z, text, numbers, barMap)
+			bool operator==(const Foo& o) const noexcept { return make_tuple() == o.make_tuple(); }
+		};
 
-	Foo foo;
-	json5::from_string("{ x: 1, y: 2, z: 3 }", foo);
+		Foo foo1;
+		json5::to_file("Foo.json5", foo1);
+
+		Foo foo2;
+		json5::from_file("Foo.json5", foo2);
+
+		if (foo1 == foo2)
+			std::cout << "foo1 == foo2" << std::endl;
+		else
+			std::cout << "foo1 != foo2" << std::endl;
+	}
 
 	return 0;
 }

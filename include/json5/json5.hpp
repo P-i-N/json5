@@ -243,7 +243,7 @@ enum class token_type
 	literal_true, literal_false, literal_null
 };
 
-struct reader
+struct reader final
 {
 	document& doc;
 	std::istream& is;
@@ -835,6 +835,30 @@ void document::assign_rvalue(document&& rValue) noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline void to_stream(std::ostream& os, const char* str)
+{
+	os << "\"";
+
+	while (*str)
+	{
+		if (str[0] == '\n')
+			os << "\\n";
+		else if (str[0] == '\r')
+			os << "\\r";
+		else if (str[0] == '"')
+			os << "\\\"";
+		else if (str[0] == '\\')
+			os << "\\\\";
+		else
+			os << *str;
+
+		++str;
+	}
+
+	os << "\"";
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline void to_stream(std::ostream& os, const value& v, int depth = 0)
 {
 	if (v.is_null())
@@ -846,28 +870,7 @@ inline void to_stream(std::ostream& os, const value& v, int depth = 0)
 	else if (v.is_number())
 		os << v.get_double();
 	else if (v.is_string())
-	{
-		os << "\"";
-
-		const auto* str = v.get_c_str();
-		while (*str)
-		{
-			if (str[0] == '\n')
-				os << "\\n";
-			else if (str[0] == '\r')
-				os << "\\r";
-			else if (str[0] == '"')
-				os << "\\\"";
-			else if (str[0] == '\\')
-				os << "\\\\";
-			else
-				os << *str;
-
-			++str;
-		}
-
-		os << "\"";
-	}
+		to_stream(os, v.get_c_str());
 	else if (v.is_array())
 	{
 		if (auto array = json5::array(v); !array.empty())

@@ -1,0 +1,27 @@
+{
+  x: 123,
+  y: 456,
+  z: true,
+  text: "Hello, world!",
+  numbers: [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  barMap: {
+    "x": {
+      name: "a",
+      age: 1
+    },
+    "y": {
+      name: "b",
+      age: 2
+    },
+    "z": {
+      name: "c",
+      age: 3
+    }
+  }
+}

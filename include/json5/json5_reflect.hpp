@@ -2,22 +2,46 @@
 
 #include "json5.hpp"
 
+#include <map>
+
 #if !defined(JSON5_REFLECT)
 #define JSON5_REFLECT(...) \
-	auto make_tuple() noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
-	auto make_tuple() const noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); }
+	auto make_named_tuple() noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
+	auto make_named_tuple() const noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
+	auto make_tuple() noexcept { return std::tie(__VA_ARGS__); } \
+	auto make_tuple() const noexcept { return std::tie(__VA_ARGS__); }
 #endif
 
 namespace json5 {
 
 namespace detail {
 
-struct write_context final
+struct writer final
 {
 	std::ostream& os;
 	int depth = 0;
+	const char* indent_str = "  ";
 
-	void indent() { for (int i = 0; i < depth; ++i) os << "    "; }
+	void indent() { for (int i = 0; i < depth; ++i) os << indent_str; }
+};
+
+struct writer_scope final
+{
+	writer& wr;
+	const char* chars;
+
+	writer_scope(writer& w, const char* ch): wr(w), chars(ch)
+	{
+		wr.os << chars[0] << std::endl;
+		++wr.depth;
+	}
+
+	~writer_scope()
+	{
+		--wr.depth;
+		wr.indent();
+		wr.os << chars[1];
+	}
 };
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -39,34 +63,76 @@ inline std::string_view get_name_slice(const char* names, size_t index)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string(write_context& ctx, int value)
-{
-	ctx.os << value;
-}
+inline void write(writer& ctx, bool value) { ctx.os << (value ? "true" : "false"); }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string(write_context& ctx, const char* value)
-{
-	ctx.os << "\"";
+inline void write(writer& ctx, int value) { ctx.os << value; }
+inline void write(writer& ctx, float value) { ctx.os << value; }
+inline void write(writer& ctx, double value) { ctx.os << value; }
 
-	while (*value)
+//---------------------------------------------------------------------------------------------------------------------
+inline void write(writer& ctx, const char* value) { json5::to_stream(ctx.os, value); }
+inline void write(writer& ctx, const std::string& value) { write(ctx, value.c_str()); }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline void write_array(writer& ctx, const T* values, size_t numItems)
+{
+	if (numItems)
 	{
-		// TODO: Properly escape!
-		char ch = *value;
-		ctx.os << ch;
+		writer_scope _(ctx, "[]");
 
-		++value;
+		for (size_t i = 0; i < numItems; ++i)
+		{
+			ctx.indent();
+			write(ctx, values[i]);
+
+			if (i < numItems - 1) ctx.os << ",";
+			ctx.os << std::endl;
+		}
 	}
-
-	ctx.os << "\"";
+	else
+		ctx.os << "[]";
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string(write_context& ctx, const std::string& value) { to_string(ctx, value.c_str()); }
+template <typename T, typename A>
+inline void write(writer& ctx, const std::vector<T, A>& value) { write_array(ctx, value.data(), value.size()); }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline void write_map(writer& ctx, const T& value)
+{
+	if (!value.empty())
+	{
+		writer_scope _(ctx, "{}");
+
+		size_t count = value.size();
+		for (const auto& kvp : value)
+		{
+			ctx.indent();
+			write(ctx, kvp.first);
+			ctx.os << ": ";
+			write(ctx, kvp.second);
+
+			if (--count) ctx.os << ",";
+			ctx.os << std::endl;
+		}
+	}
+	else
+		ctx.os << "{}";
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename K, typename T, typename P, typename A>
+inline void write(writer& ctx, const std::map<K, T, P, A>& value) { write_map(ctx, value); }
+
+template <typename K, typename T, typename H, typename EQ, typename A>
+inline void write(writer& ctx, const std::unordered_map<K, T, H, EQ, A>& value) { write_map(ctx, value); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline void to_string(write_context& ctx, const std::tuple<Types...>& t)
+inline void write(writer& ctx, const std::tuple<Types...>& t)
 {
 	const auto& value = std::get<I>(t);
 	using Type = std::remove_reference_t<decltype(value)>;
@@ -77,9 +143,9 @@ inline void to_string(write_context& ctx, const std::tuple<Types...>& t)
 	ctx.os << name << ": ";
 
 	if constexpr (std::is_enum_v<Type>)
-		to_string(ctx, std::underlying_type_t<Type>(value));
+		write(ctx, std::underlying_type_t<Type>(value));
 	else
-		to_string(ctx, value);
+		write(ctx, value);
 
 	if constexpr (I + 1 != sizeof...(Types))
 		ctx.os << ",";
@@ -87,13 +153,36 @@ inline void to_string(write_context& ctx, const std::tuple<Types...>& t)
 	ctx.os << std::endl;
 
 	if constexpr (I + 1 != sizeof...(Types))
-		to_string<I + 1>(ctx, t);
+		write<I + 1>(ctx, t);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline void write(writer& ctx, const T& value)
+{
+	{
+		writer_scope _(ctx, "{}");
+		write(ctx, value.make_named_tuple());
+	}
+
+	if (!ctx.depth)
+		ctx.os << std::endl;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_string(const value& jsValue, int& result)
+inline error read(const value& jsValue, bool& result)
+{
+	if (!jsValue.is_boolean())
+		return { error::number_expected };
+
+	result = jsValue.get_bool();
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error read(const value& jsValue, int& result)
 {
 	if (!jsValue.is_number())
 		return { error::number_expected };
@@ -103,7 +192,27 @@ inline error from_string(const value& jsValue, int& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_string(const value& jsValue, const char*& result)
+inline error read(const value& jsValue, float& result)
+{
+	if (!jsValue.is_number())
+		return { error::number_expected };
+
+	result = jsValue.get_float();
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error read(const value& jsValue, double& result)
+{
+	if (!jsValue.is_number())
+		return { error::number_expected };
+
+	result = jsValue.get_double();
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error read(const value& jsValue, const char*& result)
 {
 	if (!jsValue.is_string())
 		return { error::string_expected };
@@ -113,8 +222,76 @@ inline error from_string(const value& jsValue, const char*& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline error read(const value& jsValue, std::string& result)
+{
+	if (!jsValue.is_string())
+		return { error::string_expected };
+
+	result = jsValue.get_c_str();
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, typename A>
+inline error read(const value& jsValue, std::vector<T, A>& result)
+{
+	if (!jsValue.is_array() && !jsValue.is_null())
+		return { error::array_expected };
+
+	auto arr = json5::array(jsValue);
+
+	result.clear();
+	result.reserve(arr.size());
+	for (const auto& i : arr)
+		if (auto err = read(i, result.emplace_back()))
+			return err;
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline error read_map(const value& jsValue, T& result)
+{
+	if (!jsValue.is_object() && !jsValue.is_null())
+		return { error::object_expected };
+
+	std::pair<typename T::key_type, typename T::mapped_type> kvp;
+
+	result.clear();
+	for (auto jsKV : json5::object(jsValue))
+	{
+		kvp.first = jsKV.first;
+
+		if (auto err = read(jsKV.second, kvp.second))
+			return err;
+
+		result.emplace(std::move(kvp));
+	}
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename K, typename T, typename P, typename A>
+inline error read(const value& jsValue, std::map<K, T, P, A>& result) { return read_map(jsValue, result); }
+
+template <typename K, typename T, typename H, typename EQ, typename A>
+inline error read(const value& jsValue, std::unordered_map<K, T, H, EQ, A>& result) { return read_map(jsValue, result); }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline error read(const value& jsValue, T& result)
+{
+	if (!jsValue.is_object())
+		return { error::object_expected };
+
+	return read(json5::object(jsValue), result.make_named_tuple());
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline error from_string(const object& obj, std::tuple<Types...>& t)
+inline error read(const object& obj, std::tuple<Types...>& t)
 {
 	auto& value = std::get<I>(t);
 	using Type = std::remove_reference_t<decltype(value)>;
@@ -124,13 +301,13 @@ inline error from_string(const object& obj, std::tuple<Types...>& t)
 	auto iter = obj.find(name);
 	if (iter != obj.end())
 	{
-		if (auto err = from_string((*iter).second, value))
+		if (auto err = read((*iter).second, value))
 			return err;
 	}
 
 	if constexpr (I + 1 != sizeof...(Types))
 	{
-		if (auto err = from_string<I + 1>(obj, t))
+		if (auto err = read<I + 1>(obj, t))
 			return err;
 	}
 
@@ -143,24 +320,17 @@ inline error from_string(const object& obj, std::tuple<Types...>& t)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_string(detail::write_context& ctx, const T& value)
+inline void to_stream(detail::writer& ctx, const T& value)
 {
-	ctx.os << "{\n";
-	++ctx.depth;
-
-	detail::to_string(ctx, value.make_tuple());
-
-	--ctx.depth;
-	ctx.indent();
-	ctx.os << "}\n";
+	detail::write(ctx, value);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_string(std::ostream& os, const T& value)
+inline void to_stream(std::ostream& os, const T& value)
 {
-	detail::write_context ctx{ os };
-	to_string(ctx, value);
+	detail::writer ctx{ os };
+	detail::write(ctx, value);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -168,7 +338,7 @@ template <typename T>
 inline void to_string(std::string& str, const T& value)
 {
 	std::ostringstream os;
-	to_string(os, value);
+	to_stream(os, value);
 	str = os.str();
 }
 
@@ -181,16 +351,22 @@ inline std::string to_string(const T& value)
 	return result;
 }
 
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline bool to_file(const std::string& fileName, const T& value)
+{
+	std::ofstream ofs(fileName);
+	to_stream(ofs, value);
+	return true;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_string(const document& doc, T& value)
+inline error from_document(const document& doc, T& value)
 {
-	if (!doc.root().is_object())
-		return { error::object_expected };
-
-	return detail::from_string(object(doc.root()), value.make_tuple());
+	return detail::read(doc.root(), value);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -201,7 +377,18 @@ inline error from_string(const std::string& str, T& value)
 	if (auto err = from_string(str, doc))
 		return err;
 
-	return from_string(doc, value);
+	return from_document(doc, value);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline error from_file(const std::string& fileName, T& value)
+{
+	document doc;
+	if (auto err = from_file(fileName, doc))
+		return err;
+
+	return from_document(doc, value);
 }
 
 } // json5
