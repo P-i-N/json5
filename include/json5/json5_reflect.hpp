@@ -6,10 +6,10 @@
 
 #if !defined(JSON5_REFLECT)
 #define JSON5_REFLECT(...) \
-	auto make_named_tuple() noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
-	auto make_named_tuple() const noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
-	auto make_tuple() noexcept { return std::tie(__VA_ARGS__); } \
-	auto make_tuple() const noexcept { return std::tie(__VA_ARGS__); }
+	inline auto make_named_tuple() noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
+	inline auto make_named_tuple() const noexcept { return std::tie( #__VA_ARGS__, __VA_ARGS__ ); } \
+	inline auto make_tuple() noexcept { return std::tie(__VA_ARGS__); } \
+	inline auto make_tuple() const noexcept { return std::tie(__VA_ARGS__); }
 #endif
 
 namespace json5 {
@@ -28,11 +28,11 @@ struct writer final
 struct writer_scope final
 {
 	writer& wr;
-	const char* chars;
+	const char* scope_chars;
 
-	writer_scope(writer& w, const char* ch): wr(w), chars(ch)
+	writer_scope(writer& w, const char* ch): wr(w), scope_chars(ch)
 	{
-		wr.os << chars[0] << std::endl;
+		wr.os << scope_chars[0] << std::endl;
 		++wr.depth;
 	}
 
@@ -40,9 +40,11 @@ struct writer_scope final
 	{
 		--wr.depth;
 		wr.indent();
-		wr.os << chars[1];
+		wr.os << scope_chars[1];
 	}
 };
+
+template <typename T> struct inherits final { using type = T; };
 
 //---------------------------------------------------------------------------------------------------------------------
 inline std::string_view get_name_slice(const char* names, size_t index)
@@ -52,7 +54,7 @@ inline std::string_view get_name_slice(const char* names, size_t index)
 		if (*names++ == ',')
 			--numCommas;
 
-	while (*names <= 32)
+	while (*names && *names <= 32)
 		++names;
 
 	size_t length = 0;
@@ -63,187 +65,190 @@ inline std::string_view get_name_slice(const char* names, size_t index)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void write(writer& ctx, bool value) { ctx.os << (value ? "true" : "false"); }
+inline void write(writer& w, bool value) { w.os << (value ? "true" : "false"); }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void write(writer& ctx, int value) { ctx.os << value; }
-inline void write(writer& ctx, float value) { ctx.os << value; }
-inline void write(writer& ctx, double value) { ctx.os << value; }
+inline void write(writer& w, int value) { w.os << value; }
+inline void write(writer& w, float value) { w.os << value; }
+inline void write(writer& w, double value) { w.os << value; }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void write(writer& ctx, const char* value) { json5::to_stream(ctx.os, value); }
-inline void write(writer& ctx, const std::string& value) { write(ctx, value.c_str()); }
+inline void write(writer& w, const char* value) { json5::to_stream(w.os, value); }
+inline void write(writer& w, const std::string& value) { write(w, value.c_str()); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void write_array(writer& ctx, const T* values, size_t numItems)
+inline void write_array(writer& w, const T* values, size_t numItems)
 {
 	if (numItems)
 	{
-		writer_scope _(ctx, "[]");
+		writer_scope _(w, "[]");
 
 		for (size_t i = 0; i < numItems; ++i)
 		{
-			ctx.indent();
-			write(ctx, values[i]);
+			w.indent();
+			write(w, values[i]);
 
-			if (i < numItems - 1) ctx.os << ",";
-			ctx.os << std::endl;
+			if (i < numItems - 1) w.os << ",";
+			w.os << std::endl;
 		}
 	}
 	else
-		ctx.os << "[]";
+		w.os << "[]";
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline void write(writer& ctx, const std::vector<T, A>& value) { write_array(ctx, value.data(), value.size()); }
+inline void write(writer& w, const std::vector<T, A>& value) { write_array(w, value.data(), value.size()); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void write_map(writer& ctx, const T& value)
+inline void write_map(writer& w, const T& value)
 {
 	if (!value.empty())
 	{
-		writer_scope _(ctx, "{}");
+		writer_scope _(w, "{}");
 
 		size_t count = value.size();
 		for (const auto& kvp : value)
 		{
-			ctx.indent();
-			write(ctx, kvp.first);
-			ctx.os << ": ";
-			write(ctx, kvp.second);
+			w.indent();
+			write(w, kvp.first);
+			w.os << ": ";
+			write(w, kvp.second);
 
-			if (--count) ctx.os << ",";
-			ctx.os << std::endl;
+			if (--count) w.os << ",";
+			w.os << std::endl;
 		}
 	}
 	else
-		ctx.os << "{}";
+		w.os << "{}";
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline void write(writer& ctx, const std::map<K, T, P, A>& value) { write_map(ctx, value); }
+inline void write(writer& w, const std::map<K, T, P, A>& value) { write_map(w, value); }
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline void write(writer& ctx, const std::unordered_map<K, T, H, EQ, A>& value) { write_map(ctx, value); }
+inline void write(writer& w, const std::unordered_map<K, T, H, EQ, A>& value) { write_map(w, value); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline void write(writer& ctx, const std::tuple<Types...>& t)
+inline void write(writer& w, const std::tuple<Types...>& t)
 {
 	const auto& value = std::get<I>(t);
 	using Type = std::remove_reference_t<decltype(value)>;
 
 	auto name = get_name_slice(std::get<0>(t), I - 1);
 
-	ctx.indent();
-	ctx.os << name << ": ";
+	if (!name.empty())
+	{
+		w.indent();
+		w.os << name << ": ";
 
-	if constexpr (std::is_enum_v<Type>)
-		write(ctx, std::underlying_type_t<Type>(value));
-	else
-		write(ctx, value);
+		if constexpr (std::is_enum_v<Type>)
+			write(w, std::underlying_type_t<Type>(value));
+		else
+			write(w, value);
+
+		if constexpr (I + 1 != sizeof...(Types))
+			w.os << ",";
+
+		w.os << std::endl;
+	}
 
 	if constexpr (I + 1 != sizeof...(Types))
-		ctx.os << ",";
-
-	ctx.os << std::endl;
-
-	if constexpr (I + 1 != sizeof...(Types))
-		write<I + 1>(ctx, t);
+		write<I + 1>(w, t);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void write(writer& ctx, const T& value)
+inline void write(writer& w, const T& value)
 {
 	{
-		writer_scope _(ctx, "{}");
-		write(ctx, value.make_named_tuple());
+		writer_scope _(w, "{}");
+		write(w, value.make_named_tuple());
 	}
 
-	if (!ctx.depth)
-		ctx.os << std::endl;
+	if (!w.depth)
+		w.os << std::endl;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const value& jsValue, bool& result)
+inline error read(const json5::value& in, bool& out)
 {
-	if (!jsValue.is_boolean())
+	if (!in.is_boolean())
 		return { error::number_expected };
 
-	result = jsValue.get_bool();
+	out = in.get_bool();
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const value& jsValue, int& result)
+inline error read(const json5::value& in, int& out)
 {
-	if (!jsValue.is_number())
+	if (!in.is_number())
 		return { error::number_expected };
 
-	result = jsValue.get_int();
+	out = in.get_int();
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const value& jsValue, float& result)
+inline error read(const json5::value& in, float& out)
 {
-	if (!jsValue.is_number())
+	if (!in.is_number())
 		return { error::number_expected };
 
-	result = jsValue.get_float();
+	out = in.get_float();
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const value& jsValue, double& result)
+inline error read(const json5::value& in, double& out)
 {
-	if (!jsValue.is_number())
+	if (!in.is_number())
 		return { error::number_expected };
 
-	result = jsValue.get_double();
+	out = in.get_double();
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const value& jsValue, const char*& result)
+inline error read(const json5::value& in, const char*& out)
 {
-	if (!jsValue.is_string())
+	if (!in.is_string())
 		return { error::string_expected };
 
-	result = jsValue.get_c_str();
+	out = in.get_c_str();
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const value& jsValue, std::string& result)
+inline error read(const json5::value& in, std::string& out)
 {
-	if (!jsValue.is_string())
+	if (!in.is_string())
 		return { error::string_expected };
 
-	result = jsValue.get_c_str();
+	out = in.get_c_str();
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline error read(const value& jsValue, std::vector<T, A>& result)
+inline error read(const json5::value& in, std::vector<T, A>& out)
 {
-	if (!jsValue.is_array() && !jsValue.is_null())
+	if (!in.is_array() && !in.is_null())
 		return { error::array_expected };
 
-	auto arr = json5::array(jsValue);
+	auto arr = json5::array(in);
 
-	result.clear();
-	result.reserve(arr.size());
+	out.clear();
+	out.reserve(arr.size());
 	for (const auto& i : arr)
-		if (auto err = read(i, result.emplace_back()))
+		if (auto err = read(i, out.emplace_back()))
 			return err;
 
 	return { error::none };
@@ -251,22 +256,22 @@ inline error read(const value& jsValue, std::vector<T, A>& result)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_map(const value& jsValue, T& result)
+inline error read_map(const json5::value& in, T& out)
 {
-	if (!jsValue.is_object() && !jsValue.is_null())
+	if (!in.is_object() && !in.is_null())
 		return { error::object_expected };
 
 	std::pair<typename T::key_type, typename T::mapped_type> kvp;
 
-	result.clear();
-	for (auto jsKV : json5::object(jsValue))
+	out.clear();
+	for (auto jsKV : json5::object(in))
 	{
 		kvp.first = jsKV.first;
 
 		if (auto err = read(jsKV.second, kvp.second))
 			return err;
 
-		result.emplace(std::move(kvp));
+		out.emplace(std::move(kvp));
 	}
 
 	return { error::none };
@@ -274,34 +279,34 @@ inline error read_map(const value& jsValue, T& result)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline error read(const value& jsValue, std::map<K, T, P, A>& result) { return read_map(jsValue, result); }
+inline error read(const json5::value& in, std::map<K, T, P, A>& out) { return read_map(in, out); }
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline error read(const value& jsValue, std::unordered_map<K, T, H, EQ, A>& result) { return read_map(jsValue, result); }
+inline error read(const json5::value& in, std::unordered_map<K, T, H, EQ, A>& out) { return read_map(in, out); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read(const value& jsValue, T& result)
+inline error read(const json5::value& in, T& out)
 {
-	if (!jsValue.is_object())
+	if (!in.is_object())
 		return { error::object_expected };
 
-	return read(json5::object(jsValue), result.make_named_tuple());
+	return read(json5::object(in), out.make_named_tuple());
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline error read(const object& obj, std::tuple<Types...>& t)
+inline error read(const json5::object& obj, std::tuple<Types...>& t)
 {
-	auto& value = std::get<I>(t);
-	using Type = std::remove_reference_t<decltype(value)>;
+	auto& out = std::get<I>(t);
+	using Type = std::remove_reference_t<decltype(out)>;
 
 	auto name = get_name_slice(std::get<0>(t), I - 1);
 
 	auto iter = obj.find(name);
 	if (iter != obj.end())
 	{
-		if (auto err = read((*iter).second, value))
+		if (auto err = read((*iter).second, out))
 			return err;
 	}
 
