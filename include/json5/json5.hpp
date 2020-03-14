@@ -188,21 +188,6 @@ struct error final
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace detail {
-
-struct reader
-{
-	using string_buffer_t = std::vector<char>;
-	using properties_buffer_t = std::vector<std::unique_ptr<value::properties_t>>;
-	using values_buffer_t = std::vector<std::unique_ptr<value::values_t>>;
-
-	reader(document& doc);
-};
-
-} // namespace detail
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 class document final
 {
 public:
@@ -214,59 +199,17 @@ public:
 	document& operator=(document&& rValue) noexcept { assign_rvalue(std::forward<document>(rValue)); return *this; }
 
 	const value& root() const noexcept { return _root; }
-
-	error parse(std::istream& is) { return parse(context{ is }); }
-	error parse(const std::string& str) { return parse(context{ std::istringstream(str) }); }
 	
 private:
 	void assign_copy(const document& copy);
 	void assign_rvalue(document&& rValue) noexcept;
 
-	struct context final
-	{
-		std::istream& is;
-		int line = 1;
-		int column = 1;
+	std::string _stringBuffer;
+	std::vector<std::unique_ptr<value::properties_t>> _propertiesBuffer;
+	std::vector<std::unique_ptr<value::values_t>> _valuesBuffer;
 
-		char next()
-		{
-			if (is.peek() == '\n')
-			{
-				column = 0;
-				++line;
-			}
-
-			++column;
-			return is.get();
-		}
-
-		char peek() { return is.peek(); }
-		bool eof() const { return is.eof(); }
-		error make_error(int type) const noexcept { return error{ type, line, column }; }
-	};
-
-	error parse(context& ctx);
-	error parse_value(context& ctx, value &result);
-	error parse_properties(context& ctx, value::properties_t& result);
-	error parse_values(context& ctx, value::values_t& result);
-
-	enum class token_type
-	{
-		unknown, identifier, literal, string, number, colon, comma,
-		object_begin, object_end, array_begin, array_end,
-		literal_true, literal_false, literal_null
-	};
-
-	error peek_next_token(context& ctx, token_type& result);
-
-	error parse_number(context& ctx, double& result);
-	error parse_string(context& ctx, unsigned& result);
-	error parse_identifier(context& ctx, unsigned& result);
-	error parse_literal(context& ctx, token_type& result);
-
-	detail::reader::string_buffer_t _stringBuffer;
-	detail::reader::properties_buffer_t _propertiesBuffer;
-	detail::reader::values_buffer_t _valuesBuffer;
+	value make_object() { return value(this, *_propertiesBuffer.emplace_back(new value::properties_t())); }
+	value make_array() { return value(this, *_valuesBuffer.emplace_back(new value::values_t())); }
 
 	value _root;
 
@@ -274,6 +217,469 @@ private:
 	friend object;
 	friend detail::reader;
 };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
+
+enum class token_type
+{
+	unknown, identifier, literal, string, number, colon, comma,
+	object_begin, object_end, array_begin, array_end,
+	literal_true, literal_false, literal_null
+};
+
+struct reader
+{
+	document& doc;
+	std::istream& is;
+
+	int line = 1;
+	int column = 1;
+
+	char next();
+	char peek() { return is.peek(); }
+	bool eof() const { return is.eof(); }
+	error make_error(int type) const noexcept { return error{ type, line, column }; }
+
+	error parse();
+	error parse_value(value& result);
+	error parse_properties(value::properties_t& result);
+	error parse_values(value::values_t& result);
+	error peek_next_token(token_type& result);
+	error parse_number(double& result);
+	error parse_string(unsigned& result);
+	error parse_identifier(unsigned& result);
+	error parse_literal(token_type& result);
+};
+
+//---------------------------------------------------------------------------------------------------------------------
+inline char reader::next()
+{
+	if (is.peek() == '\n')
+	{
+		column = 0;
+		++line;
+	}
+
+	++column;
+	return is.get();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse()
+{
+	doc._root = value();
+
+	doc._stringBuffer.clear();
+	doc._stringBuffer.push_back(0);
+
+	token_type tt = token_type::unknown;
+	if (auto err = peek_next_token(tt))
+		return err;
+
+	switch (tt)
+	{
+		case token_type::array_begin:
+		{
+			doc._root = doc.make_array();
+			if (auto err = parse_values(*doc._root._values))
+				return err;
+		}
+		break;
+
+		case token_type::object_begin:
+		{
+			doc._root = doc.make_object();
+			if (auto err = parse_properties(*doc._root._properties))
+				return err;
+		}
+		break;
+
+		default:
+			return make_error(error::invalid_root);
+	}
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_value(value& result)
+{
+	token_type tt = token_type::unknown;
+	if (auto err = peek_next_token(tt))
+		return err;
+
+	switch (tt)
+	{
+		case token_type::number:
+		{
+			if (double number = 0.0; auto err = parse_number(number))
+				return err;
+			else
+				result = value(number);
+		}
+		break;
+
+		case token_type::string:
+		{
+			if (unsigned offset = 0; auto err = parse_string(offset))
+				return err;
+			else
+				result = value(&doc, offset);
+		}
+		break;
+
+		case token_type::identifier:
+		{
+			if (token_type lit = token_type::unknown; auto err = parse_literal(lit))
+				return err;
+			else
+			{
+				if (lit == token_type::literal_true)
+					result = value(true);
+				else if (lit == token_type::literal_false)
+					result = value(false);
+				else if (lit == token_type::literal_null)
+					result = value();
+				else
+					return make_error(error::invalid_literal);
+			}
+		}
+		break;
+
+		case token_type::object_begin:
+		{
+			result = doc.make_object();
+			if (auto err = parse_properties(*result._properties))
+				return err;
+		}
+		break;
+
+		case token_type::array_begin:
+		{
+			result = doc.make_array();
+			if (auto err = parse_values(*result._values))
+				return err;
+		}
+		break;
+
+		default:
+			return make_error(error::syntax_error);
+	}
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_properties(value::properties_t& result)
+{
+	next(); // Consume '{'
+
+	bool expectComma = false;
+	while (!eof())
+	{
+		token_type tt = token_type::unknown;
+		if (auto err = peek_next_token(tt))
+			return err;
+
+		unsigned keyOffset;
+
+		switch (tt)
+		{
+		case token_type::identifier:
+		case token_type::string:
+		{
+			if (expectComma)
+				return make_error(error::comma_expected);
+
+			if (auto err = parse_identifier(keyOffset))
+				return err;
+		}
+		break;
+
+		case token_type::object_end:
+			next(); // Consume '}'
+			return { error::none };
+
+		case token_type::comma:
+			if (!expectComma)
+				return make_error(error::syntax_error);
+
+			next(); // Consume ','
+			expectComma = false;
+			continue;
+
+		default:
+			return expectComma ? make_error(error::comma_expected) : make_error(error::syntax_error);
+		}
+
+		if (auto err = peek_next_token(tt))
+			return err;
+
+		if (tt != token_type::colon)
+			return make_error(error::colon_expected);
+
+		next(); // Consume ':'
+
+		value newValue;
+		if (auto err = parse_value(newValue))
+			return err;
+
+		detail::hashed_string_ref hashedKey;
+		hashedKey.offset = keyOffset;
+
+		auto sv = std::string_view(doc._stringBuffer.data() + hashedKey.offset);
+		hashedKey.hash = std::hash<std::string_view>()(sv);
+
+		result.insert({ hashedKey, newValue });
+		expectComma = true;
+	}
+
+	return make_error(error::unexpected_end);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_values(value::values_t& result)
+{
+	next(); // Consume '['
+
+	bool expectComma = false;
+	while (!eof())
+	{
+		token_type tt = token_type::unknown;
+		if (auto err = peek_next_token(tt))
+			return err;
+
+		if (tt == token_type::array_end)
+		{
+			next(); // Consume ']'
+			return { error::none };
+		}
+		else if (expectComma)
+		{
+			expectComma = false;
+
+			if (tt != token_type::comma)
+				return make_error(error::comma_expected);
+
+			next(); // Consume ','
+			continue;
+		}
+
+		if (auto err = parse_value(result.emplace_back()))
+			return err;
+
+		expectComma = true;
+	}
+
+	return make_error(error::unexpected_end);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::peek_next_token(token_type& result)
+{
+	enum class comment_type { none, line, block } parsingComment = comment_type::none;
+
+	while (!eof())
+	{
+		char ch = peek();
+		if (ch == '\n')
+		{
+			if (parsingComment == comment_type::line)
+				parsingComment = comment_type::none;
+		}
+		else if (parsingComment != comment_type::none || ch <= 32)
+		{
+			if (parsingComment == comment_type::block && ch == '*')
+			{
+				next(); // Consume '*'
+
+				if (peek() == '/')
+					parsingComment = comment_type::none;
+			}
+		}
+		else if (ch == '/')
+		{
+			next(); // Consume '/'
+
+			if (peek() == '/')
+				parsingComment = comment_type::line;
+			else if (peek() == '*')
+				parsingComment = comment_type::block;
+			else
+				return make_error(error::syntax_error);
+		}
+		else if (strchr("{}[]:,", ch))
+		{
+			if (ch == '{')
+				result = token_type::object_begin;
+			else if (ch == '}')
+				result = token_type::object_end;
+			else if (ch == '[')
+				result = token_type::array_begin;
+			else if (ch == ']')
+				result = token_type::array_end;
+			else if (ch == ':')
+				result = token_type::colon;
+			else if (ch == ',')
+				result = token_type::comma;
+
+			return { error::none };
+		}
+		else if (isalpha(ch) || ch == '_')
+		{
+			result = token_type::identifier;
+			return { error::none };
+		}
+		else if (isdigit(ch) || ch == '.' || ch == '+' || ch == '-')
+		{
+			result = token_type::number;
+			return { error::none };
+		}
+		else if (ch == '"' || ch == '\'')
+		{
+			result = token_type::string;
+			return { error::none };
+		}
+		else
+			return make_error(error::syntax_error);
+
+		next();
+	}
+
+	return make_error(error::unexpected_end);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_number(double& result)
+{
+	auto& strBuffer = doc._stringBuffer;
+	size_t offset = strBuffer.size();
+	size_t length = 0;
+
+	while (!eof())
+	{
+		strBuffer.push_back(next());
+		++length;
+
+		char ch = peek();
+		if (!isdigit(ch))
+			break;
+	}
+
+	strBuffer.push_back(0);
+
+	auto convResult = std::from_chars(
+		strBuffer.data() + offset,
+		strBuffer.data() + offset + length,
+		result);
+
+	if (convResult.ec != std::errc())
+		return make_error(error::syntax_error);
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_string(unsigned& result)
+{
+	bool singleQuoted = peek() == '\'';
+	next(); // Consume '\'' or '"'
+
+	auto& strBuffer = doc._stringBuffer;
+	result = static_cast<unsigned>(strBuffer.size());
+
+	while (!eof())
+	{
+		char ch = peek();
+		if ((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"'))
+		{
+			next(); // Consume '\'' or '"'
+			break;
+		}
+
+		strBuffer.push_back(next());
+	}
+
+	if (eof())
+		return make_error(error::unexpected_end);
+
+	strBuffer.push_back(0);
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_identifier(unsigned& result)
+{
+	auto& strBuffer = doc._stringBuffer;
+	result = static_cast<unsigned>(strBuffer.size());
+
+	char firstCh = peek();
+	bool isString = (firstCh == '\'') || (firstCh == '"');
+
+	if (isString)
+	{
+		next(); // Consume '\'' or '"'
+
+		char ch = peek();
+		if (!isalpha(ch) && ch != '_')
+			return make_error(error::syntax_error);
+	}
+
+	while (!eof())
+	{
+		strBuffer.push_back(next());
+
+		char ch = peek();
+		if (!isalpha(ch) && !isdigit(ch) && ch != '_')
+			break;
+	}
+
+	if (isString && firstCh != next()) // Consume '\'' or '"'
+		return make_error(error::syntax_error);
+
+	strBuffer.push_back(0);
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_literal(token_type& result)
+{
+	char ch = peek();
+
+	// "true"
+	if (ch == 't')
+	{
+		if (next() && next() == 'r' && next() == 'u' && next() == 'e')
+		{
+			result = token_type::literal_true;
+			return { error::none };
+		}
+	}
+	// "false"
+	else if (ch == 'f')
+	{
+		if (next() && next() == 'a' && next() == 'l' && next() == 's' && next() == 'e')
+		{
+			result = token_type::literal_false;
+			return { error::none };
+		}
+	}
+	// "null"
+	else if (ch == 'n')
+	{
+		if (next() && next() == 'u' && next() == 'l' && next() == 'l')
+		{
+			result = token_type::literal_null;
+			return { error::none };
+		}
+	}
+
+	return make_error(error::invalid_literal);
+}
+
+} // namespace detail
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -375,425 +781,11 @@ void document::assign_rvalue(document&& rValue) noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error document::parse(context& ctx)
-{
-	_root = value();
-
-	_stringBuffer.clear();
-	_stringBuffer.push_back(0);
-
-	token_type tt = token_type::unknown;
-	if (auto err = peek_next_token(ctx, tt))
-		return err;
-	
-	switch (tt)
-	{
-		case token_type::array_begin:
-		{
-			_root = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
-			if (auto err = parse_values(ctx, *_root._values))
-				return err;
-		}
-		break;
-
-		case token_type::object_begin:
-		{
-			_root = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
-			if (auto err = parse_properties(ctx, *_root._properties))
-				return err;
-		}
-		break;
-
-		default:
-			return ctx.make_error(error::invalid_root);
-	}
-	
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_value(context& ctx, value& result)
-{
-	token_type tt = token_type::unknown;
-	if (auto err = peek_next_token(ctx, tt))
-		return err;
-
-	switch (tt)
-	{
-		case token_type::number:
-		{
-			if (double number = 0.0; auto err = parse_number(ctx, number))
-				return err;
-			else
-				result = value(number);
-		}
-		break;
-
-		case token_type::string:
-		{
-			if (unsigned offset = 0; auto err = parse_string(ctx, offset))
-				return err;
-			else
-				result = value(this, offset);
-		}
-		break;
-
-		case token_type::identifier:
-		{
-			if (token_type lit = token_type::unknown; auto err = parse_literal(ctx, lit))
-				return err;
-			else
-			{
-				if (lit == token_type::literal_true)
-					result = value(true);
-				else if (lit == token_type::literal_false)
-					result = value(false);
-				else if (lit == token_type::literal_null)
-					result = value();
-				else
-					return ctx.make_error(error::invalid_literal);
-			}
-		}
-		break;
-
-		case token_type::object_begin:
-		{
-			result = value(this, *_propertiesBuffer.emplace_back(new value::properties_t()));
-			if (auto err = parse_properties(ctx, *result._properties))
-				return err;
-		}
-		break;
-
-		case token_type::array_begin:
-		{
-			result = value(this, *_valuesBuffer.emplace_back(new value::values_t()));
-			if (auto err = parse_values(ctx, *result._values))
-				return err;
-		}
-		break;
-
-		default:
-			return ctx.make_error(error::syntax_error);
-	}
-
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_properties(context& ctx, value::properties_t& result)
-{
-	ctx.next(); // Consume '{'
-
-	bool expectComma = false;
-	while (!ctx.eof())
-	{
-		token_type tt = token_type::unknown;
-		if (auto err = peek_next_token(ctx, tt))
-			return err;
-
-		unsigned keyOffset;
-
-		switch (tt)
-		{
-			case token_type::identifier:
-			case token_type::string:
-			{
-				if (expectComma)
-					return ctx.make_error(error::comma_expected);
-
-				if (auto err = parse_identifier(ctx, keyOffset))
-					return err;
-			}
-			break;
-
-			case token_type::object_end:
-				ctx.next(); // Consume '}'
-				return { error::none };
-
-			case token_type::comma:
-				if (!expectComma)
-					return ctx.make_error(error::syntax_error);
-
-				ctx.next(); // Consume ','
-				expectComma = false;
-				continue;
-
-			default:
-				return expectComma ? ctx.make_error(error::comma_expected) : ctx.make_error(error::syntax_error);
-		}
-		
-		if (auto err = peek_next_token(ctx, tt))
-			return err;
-
-		if (tt != token_type::colon)
-			return ctx.make_error(error::colon_expected);
-
-		ctx.next(); // Consume ':'
-
-		value newValue;
-		if (auto err = parse_value(ctx, newValue))
-			return err;
-
-		detail::hashed_string_ref hashedKey;
-		hashedKey.offset = keyOffset;
-
-		auto sv = std::string_view(_stringBuffer.data() + hashedKey.offset);
-		hashedKey.hash = std::hash<std::string_view>()(sv);
-
-		result.insert({ hashedKey, newValue });
-		expectComma = true;
-	}
-
-	return ctx.make_error(error::unexpected_end);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_values(context& ctx, value::values_t& result)
-{
-	ctx.next(); // Consume '['
-
-	bool expectComma = false;
-	while (!ctx.eof())
-	{
-		token_type tt = token_type::unknown;
-		if (auto err = peek_next_token(ctx, tt))
-			return err;
-
-		if (tt == token_type::array_end)
-		{
-			ctx.next(); // Consume ']'
-			return { error::none };
-		}
-		else if (expectComma)
-		{
-			expectComma = false;
-
-			if (tt != token_type::comma)
-				return ctx.make_error(error::comma_expected);
-
-			ctx.next(); // Consume ','
-			continue;
-		}
-
-		if (auto err = parse_value(ctx, result.emplace_back()))
-			return err;
-
-		expectComma = true;
-	}
-
-	return ctx.make_error(error::unexpected_end);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::peek_next_token(context& ctx, token_type& result)
-{
-	enum class comment_type { none, line, block } parsingComment = comment_type::none;
-
-	while (!ctx.eof())
-	{
-		char ch = ctx.peek();
-		if (ch == '\n')
-		{
-			if (parsingComment == comment_type::line)
-				parsingComment = comment_type::none;
-		}
-		else if (parsingComment != comment_type::none || ch <= 32)
-		{
-			if (parsingComment == comment_type::block && ch == '*')
-			{
-				ctx.next(); // Consume '*'
-
-				if (ctx.peek() == '/')
-					parsingComment = comment_type::none;
-			}
-		}
-		else if (ch == '/')
-		{
-			ctx.next(); // Consume '/'
-
-			if (ctx.peek() == '/')
-				parsingComment = comment_type::line;
-			else if (ctx.peek() == '*')
-				parsingComment = comment_type::block;
-			else
-				return ctx.make_error(error::syntax_error);
-		}
-		else if (strchr("{}[]:,", ch))
-		{
-			if (ch == '{')
-				result = token_type::object_begin;
-			else if (ch == '}')
-				result = token_type::object_end;
-			else if (ch == '[')
-				result = token_type::array_begin;
-			else if (ch == ']')
-				result = token_type::array_end;
-			else if (ch == ':')
-				result = token_type::colon;
-			else if (ch == ',')
-				result = token_type::comma;
-
-			return { error::none };
-		}
-		else if (isalpha(ch) || ch == '_')
-		{
-			result = token_type::identifier;
-			return { error::none };
-		}
-		else if (isdigit(ch) || ch == '.' || ch == '+' || ch == '-')
-		{
-			result = token_type::number;
-			return { error::none };
-		}
-		else if (ch == '"' || ch == '\'')
-		{
-			result = token_type::string;
-			return { error::none };
-		}
-		else
-			return ctx.make_error(error::syntax_error);
-
-		ctx.next();
-	}
-	
-	return ctx.make_error(error::unexpected_end);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_number(context& ctx, double& result)
-{
-	size_t offset = _stringBuffer.size();
-	size_t length = 0;
-
-	while (!ctx.eof())
-	{
-		_stringBuffer.push_back(ctx.next());
-		++length;
-
-		char ch = ctx.peek();
-		if (!isdigit(ch))
-			break;
-	}
-
-	_stringBuffer.push_back(0);
-
-	auto convResult = std::from_chars(
-		_stringBuffer.data() + offset,
-		_stringBuffer.data() + offset + length,
-		result);
-
-	if (convResult.ec != std::errc())
-		return ctx.make_error(error::syntax_error);
-
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_string(context& ctx, unsigned& result)
-{
-	bool singleQuoted = ctx.peek() == '\'';
-	ctx.next(); // Consume '\'' or '"'
-
-	result = static_cast<unsigned>(_stringBuffer.size());
-
-	while (!ctx.eof())
-	{
-		char ch = ctx.peek();
-		if ((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"'))
-		{
-			ctx.next(); // Consume '\'' or '"'
-			break;
-		}
-
-		_stringBuffer.push_back(ctx.next());
-	}
-
-	if (ctx.eof())
-		return ctx.make_error(error::unexpected_end);
-
-	_stringBuffer.push_back(0);
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_identifier(context& ctx, unsigned& result)
-{
-	result = static_cast<unsigned>(_stringBuffer.size());
-
-	char firstCh = ctx.peek();
-	bool isString = (firstCh == '\'') || (firstCh == '"');
-
-	if (isString)
-	{
-		ctx.next(); // Consume '\'' or '"'
-
-		char ch = ctx.peek();
-		if (!isalpha(ch) && ch != '_')
-			return ctx.make_error(error::syntax_error);
-	}
-
-	while (!ctx.eof())
-	{
-		_stringBuffer.push_back(ctx.next());
-
-		char ch = ctx.peek();
-		if (!isalpha(ch) && !isdigit(ch) && ch != '_')
-			break;
-	}
-
-	if (isString && firstCh != ctx.next()) // Consume '\'' or '"'
-		return ctx.make_error(error::syntax_error);
-
-	_stringBuffer.push_back(0);
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error document::parse_literal(context& ctx, token_type& result)
-{
-	char ch = ctx.peek();
-
-	// "true"
-	if (ch == 't')
-	{
-		ctx.next(); // Consume 't'
-
-		if (ctx.next() == 'r' && ctx.next() == 'u' && ctx.next() == 'e')
-		{
-			result = token_type::literal_true;
-			return { error::none };
-		}
-	}
-	// "false"
-	else if (ch == 'f')
-	{
-		ctx.next(); // Consume 'f'
-
-		if (ctx.next() == 'a' && ctx.next() == 'l' && ctx.next() == 's' && ctx.next() == 'e')
-		{
-			result = token_type::literal_false;
-			return { error::none };
-		}
-	}
-	// "null"
-	else if (ch == 'n')
-	{
-		ctx.next(); // Consume 'n'
-
-		if (ctx.next() == 'u' && ctx.next() == 'l' && ctx.next() == 'l')
-		{
-			result = token_type::literal_null;
-			return { error::none };
-		}
-	}
-
-	return ctx.make_error(error::invalid_literal);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline error from_string(const std::string& str, document& doc)
 {
-	return { error::none };
+	std::istringstream is(str);
+	detail::reader r{ doc, is };
+	return r.parse();
 }
 
 } // namespace json5

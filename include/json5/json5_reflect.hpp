@@ -198,7 +198,7 @@ template <typename T>
 inline error from_string(const std::string& str, T& value)
 {
 	document doc;
-	if (auto err = doc.parse(str))
+	if (auto err = from_string(str, doc))
 		return err;
 
 	return from_string(doc, value);

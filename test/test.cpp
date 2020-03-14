@@ -61,9 +61,9 @@ int main(int argc, char* argv[])
 	int docSize = sizeof(json5::document);
 
 	json5::document doc;
-	json5::from_string("{}", doc);
+	auto err = json5::from_string("{ id: null, arr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!', anotherObj: { x: true, y: false, z: null } }", doc);
 
-	if (auto err = doc.parse("{ id: null, arr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!', anotherObj: { x: true, y: false, z: null } }"))
+	if (err)
 	{
 		printf("Error at line %d, column %d!\n", err.line, err.column);
 	}
