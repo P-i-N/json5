@@ -39,6 +39,8 @@ template <> struct hash<json5::detail::hashed_string_ref>
 
 namespace json5 {
 
+enum class value_type : size_t { null = 0, boolean, number, string, object, array };
+
 class value final
 {
 	static constexpr size_t size_t_msbit = (static_cast<size_t>(1) << (sizeof(size_t) * 8 - 1));
@@ -46,12 +48,14 @@ class value final
 public:
 	value() noexcept = default;
 
-	bool is_null() const noexcept { return _contentType == content_type::null; }
-	bool is_boolean() const noexcept { return _contentType == content_type::boolean; }
-	bool is_number() const noexcept { return _contentType == content_type::number; }
-	bool is_array() const noexcept { return _contentType == content_type::values; }
-	bool is_string() const noexcept { return _contentType >= content_type::last && (_offset & size_t_msbit); }
-	bool is_object() const noexcept { return _contentType >= content_type::last && !(_offset & size_t_msbit); }
+	value_type type() const noexcept;
+
+	bool is_null() const noexcept { return type() == value_type::null; }
+	bool is_boolean() const noexcept { return type() == value_type::boolean; }
+	bool is_number() const noexcept { return type() == value_type::number; }
+	bool is_string() const noexcept { return type() == value_type::string; }
+	bool is_object() const noexcept { return type() == value_type::object; }
+	bool is_array() const noexcept { return type() == value_type::array; }
 
 	bool get_bool(bool val = false) const noexcept { return is_boolean() ? _boolean : val; }
 	int get_int(int val = 0) const noexcept { return is_number() ? static_cast<int>(_number) : val; }
@@ -59,18 +63,19 @@ public:
 	double get_double(double val = 0.0) const noexcept { return is_number() ? _number : val; }
 	const char* get_c_str(const char* val = "") const noexcept;
 
+	bool operator==(const value& other) const noexcept;
+	bool operator!=(const value& other) const noexcept { return !((*this) == other); }
+
 private:
 	using properties_t = std::unordered_map<detail::hashed_string_ref, value>;
 	using values_t = std::vector<value>;
 	using pointer_map_t = std::unordered_map<size_t, size_t>;
 
-	enum class content_type : size_t { null = 0, boolean, number, properties, values, last };
-
-	value(bool val) noexcept : _contentType(content_type::boolean), _boolean(val) { }
-	value(double val) noexcept : _contentType(content_type::number), _number(val) { }
+	value(bool val) noexcept : _type(value_type::boolean), _boolean(val) { }
+	value(double val) noexcept : _type(value_type::number), _number(val) { }
 	value(const class document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
 	value(const class document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
-	value(const class document* doc, values_t& vals) : _contentType(content_type::values), _values(&vals) { }
+	value(const class document* doc, values_t& vals) : _type(value_type::array), _values(&vals) { }
 
 	void relink(const class document* newDoc, pointer_map_t* ptrMap = nullptr) noexcept;
 
@@ -90,7 +95,7 @@ private:
 
 	union
 	{
-		content_type _contentType = content_type::null;
+		value_type _type = value_type::null;
 		const class document* _doc;
 	};
 
@@ -198,6 +203,9 @@ public:
 	document& operator=(const document& copy) { assign_copy(copy); return *this; }
 	document& operator=(document&& rValue) noexcept { assign_rvalue(std::forward<document>(rValue)); return *this; }
 
+	bool operator==(const document& other) const noexcept { return _root == other._root; }
+	bool operator!=(const document& other) const noexcept { return !((*this) == other); }
+
 	const value& root() const noexcept { return _root; }
 	
 private:
@@ -224,7 +232,7 @@ namespace detail {
 
 enum class token_type
 {
-	unknown, identifier, literal, string, number, colon, comma,
+	unknown, identifier, string, number, colon, comma,
 	object_begin, object_end, array_begin, array_end,
 	literal_true, literal_false, literal_null
 };
@@ -684,15 +692,43 @@ inline error reader::parse_literal(token_type& result)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
+inline value_type value::type() const noexcept
+{
+	if (_type > value_type::array)
+		return (_offset & size_t_msbit) ? value_type::string : value_type::object;
+
+	return _type;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline const char* value::get_c_str(const char* defaultValue) const noexcept
 {
 	return is_string() ? (_doc->_stringBuffer.data() + (_offset & ~size_t_msbit)) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline bool value::operator==(const value& other) const noexcept
+{
+	auto t = type();
+	if (t != other.type())
+		return false;
+
+	switch (t)
+	{
+		case value_type::boolean: return _boolean == other._boolean;
+		case value_type::number:  return _number == other._number;
+		case value_type::string:  return !strcmp(get_c_str(), other.get_c_str());
+		case value_type::object:  return (*_properties) == (*(other._properties));
+		case value_type::array:   return (*_values) == (*(other._values));
+	}
+
+	return true;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline void value::relink(const class document* newDoc, pointer_map_t* ptrMap) noexcept
 {
-	if (_contentType >= content_type::last)
+	if (_type > value_type::array)
 		_doc = newDoc;
 
 	if (ptrMap)
