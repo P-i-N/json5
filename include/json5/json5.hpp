@@ -184,11 +184,11 @@ struct error final
 		array_expected
 	};
 
-	int value = none;
+	int type = none;
 	int line = 0;
 	int column = 0;
 
-	operator int() const noexcept { return value; }
+	operator int() const noexcept { return type; }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
