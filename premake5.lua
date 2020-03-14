@@ -39,3 +39,4 @@ project "test"
 	kind "ConsoleApp"
 	files { "test/**.cpp", "test/**.hpp", "include/**.hpp" }
 	includedirs { "include" }
+	debugdir "test"

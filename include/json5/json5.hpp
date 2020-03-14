@@ -57,6 +57,7 @@ public:
 	bool is_string() const noexcept { return type() == value_type::string; }
 	bool is_object() const noexcept { return type() == value_type::object; }
 	bool is_array() const noexcept { return type() == value_type::array; }
+	bool is_integer() const noexcept { double _; return is_number() && std::modf(_number, &_) == 0.0; }
 
 	bool get_bool(bool val = false) const noexcept { return is_boolean() ? _boolean : val; }
 	int get_int(int val = 0) const noexcept { return is_number() ? static_cast<int>(_number) : val; }
@@ -176,6 +177,7 @@ struct error final
 		unexpected_end,
 		syntax_error,
 		invalid_literal,
+		invalid_escape_seq,
 		comma_expected,
 		colon_expected,
 		boolean_expected,
@@ -543,6 +545,8 @@ inline error reader::peek_next_token(token_type& result)
 		}
 		else if (isdigit(ch) || ch == '.' || ch == '+' || ch == '-')
 		{
+			if (ch == '+') next(); // Consume leading '+'
+
 			result = token_type::number;
 			return { error::none };
 		}
@@ -573,7 +577,7 @@ inline error reader::parse_number(double& result)
 		++length;
 
 		char ch = peek();
-		if (!isdigit(ch))
+		if (ch <= 32 || ch == ',' || ch == '}' || ch == ']')
 			break;
 	}
 
@@ -607,8 +611,24 @@ inline error reader::parse_string(unsigned& result)
 			next(); // Consume '\'' or '"'
 			break;
 		}
-
-		strBuffer.push_back(next());
+		else if (ch == '\\')
+		{
+			next(); // Consume '\\'
+			
+			ch = peek();
+			if (ch == '\n')
+				next();
+			else if (ch == 't' && next())
+				strBuffer.push_back('\t');
+			else if (ch == 'n' && next())
+				strBuffer.push_back('\n');
+			else if (ch == '\\' && next())
+				strBuffer.push_back('\\');
+			else
+				return make_error(error::invalid_escape_seq);
+		}
+		else
+			strBuffer.push_back(next());
 	}
 
 	if (eof())

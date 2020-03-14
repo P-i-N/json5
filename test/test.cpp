@@ -10,8 +10,10 @@ void PrintJSONValue(const json5::value& value, int depth = 0)
 		std::cout << "null";
 	else if (value.is_boolean())
 		std::cout << (value.get_bool() ? "true" : "false");
-	else if (value.is_number())
+	else if (value.is_integer())
 		std::cout << value.get_int();
+	else if (value.is_number())
+		std::cout << value.get_double();
 	else if (value.is_string())
 		std::cout << "\"" << value.get_c_str() << "\"";
 	else if (value.is_array())
@@ -54,23 +56,62 @@ void PrintJSONValue(const json5::value& value, int depth = 0)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-int main(int argc, char* argv[])
+void PrintError(const json5::error& err)
 {
-	int sz = sizeof(json5::value);
-	int objSize = sizeof(json5::object);
-	int docSize = sizeof(json5::document);
+	const char* errStr = "";
 
-	json5::document doc;
-	auto err = json5::from_string("{ id: null, arr: [ 1, 2, 3, 4, 5 ], text: 'Hello, world!', anotherObj: { x: true, y: false, z: null } }", doc);
-
-	if (err)
+	switch (err.type)
 	{
-		printf("Error at line %d, column %d!\n", err.line, err.column);
+		case json5::error::none: return;
+		case json5::error::invalid_root: errStr = "invalid root"; break;
+		case json5::error::unexpected_end: errStr = "unexpected end"; break;
+		case json5::error::syntax_error: errStr = "syntax error"; break;
+		case json5::error::invalid_literal: errStr = "invalid literal"; break;
+		case json5::error::invalid_escape_seq: errStr = "invalid escape sequence"; break;
+		case json5::error::comma_expected: errStr = "comma expected"; break;
+		case json5::error::colon_expected: errStr = "colon expected"; break;
+		case json5::error::boolean_expected: errStr = "boolean expected"; break;
+		case json5::error::number_expected: errStr = "number expected"; break;
+		case json5::error::string_expected: errStr = "string expected"; break;
+		case json5::error::object_expected: errStr = "object expected"; break;
+		case json5::error::array_expected: errStr = "array expected"; break;
 	}
 
-	json5::document doc2 = doc;
+	printf("Error at line %d, column %d: %s\n", err.line, err.column, errStr);
+}
 
-	PrintJSONValue(doc2.root());
+//---------------------------------------------------------------------------------------------------------------------
+int main(int argc, char* argv[])
+{
+	// Load from file
+	{
+		json5::document doc;
+		PrintError(json5::from_file("short_example.json5", doc));
+
+		PrintJSONValue(doc.root());
+	}
+
+	// Equality test
+	{
+		json5::document doc1;
+		json5::from_string("{ x: 1, y: 2, z: 3 }", doc1);
+
+		json5::document doc2;
+		json5::from_string("{ z: 3, x: 1, y: 2 }", doc2);
+
+		if (doc1 == doc2)
+			std::cout << "doc1 == doc2" << std::endl;
+		else
+			std::cout << "doc1 != doc2" << std::endl;
+	}
+
+	// String line breaks
+	{
+		json5::document doc;
+		PrintError(json5::from_string("{ text: 'Hello\\\n, world!' }", doc));
+
+		PrintJSONValue(doc.root());
+	}
 
 	struct Foo
 	{
