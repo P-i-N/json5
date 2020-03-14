@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cstdint>
+#include <fstream>
 #include <istream>
 #include <memory>
 #include <sstream>
@@ -817,11 +818,24 @@ void document::assign_rvalue(document&& rValue) noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline error from_stream(std::istream& is, document& doc)
+{
+	detail::reader r{ doc, is };
+	return r.parse();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline error from_string(const std::string& str, document& doc)
 {
 	std::istringstream is(str);
-	detail::reader r{ doc, is };
-	return r.parse();
+	return from_stream(is, doc);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error from_file(const std::string& fileName, document& doc)
+{
+	std::ifstream ifs(fileName);
+	return from_stream(ifs, doc);
 }
 
 } // namespace json5
