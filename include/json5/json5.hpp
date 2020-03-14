@@ -57,10 +57,13 @@ public:
 	bool is_string() const noexcept { return type() == value_type::string; }
 	bool is_object() const noexcept { return type() == value_type::object; }
 	bool is_array() const noexcept { return type() == value_type::array; }
-	bool is_integer() const noexcept { double _; return is_number() && std::modf(_number, &_) == 0.0; }
+	bool is_integer() const noexcept { double _; return is_number() && (std::modf(_number, &_) == 0.0); }
 
 	bool get_bool(bool val = false) const noexcept { return is_boolean() ? _boolean : val; }
 	int get_int(int val = 0) const noexcept { return is_number() ? static_cast<int>(_number) : val; }
+	int64_t get_int64(int64_t val = 0) const noexcept { return is_number() ? static_cast<int64_t>(_number) : val; }
+	unsigned get_uint(unsigned val = 0) const noexcept { return is_number() ? static_cast<unsigned>(_number) : val; }
+	uint64_t get_uint64(int64_t val = 0) const noexcept { return is_number() ? static_cast<uint64_t>(_number) : val; }
 	float get_float(float val = 0.0f) const noexcept { return is_number() ? static_cast<float>(_number) : val; }
 	double get_double(double val = 0.0) const noexcept { return is_number() ? _number : val; }
 	const char* get_c_str(const char* val = "") const noexcept;
@@ -614,7 +617,7 @@ inline error reader::parse_string(unsigned& result)
 		else if (ch == '\\')
 		{
 			next(); // Consume '\\'
-			
+
 			ch = peek();
 			if (ch == '\n')
 				next();
@@ -622,6 +625,14 @@ inline error reader::parse_string(unsigned& result)
 				strBuffer.push_back('\t');
 			else if (ch == 'n' && next())
 				strBuffer.push_back('\n');
+			else if (ch == 'r' && next())
+				strBuffer.push_back('\r');
+			else if (ch == '\\' && next())
+				strBuffer.push_back('\\');
+			else if (ch == '\'' && next())
+				strBuffer.push_back('\'');
+			else if (ch == '"' && next())
+				strBuffer.push_back('"');
 			else if (ch == '\\' && next())
 				strBuffer.push_back('\\');
 			else
@@ -835,6 +846,96 @@ void document::assign_rvalue(document&& rValue) noexcept
 	for (const auto& vals : _valuesBuffer)
 		for (auto& v : *vals)
 			v.relink(this);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void to_stream(std::ostream& os, const value& v, int depth = 0)
+{
+	if (v.is_null())
+		os << "null";
+	else if (v.is_boolean())
+		os << (v.get_bool() ? "true" : "false");
+	else if (v.is_integer())
+		os << v.get_int64();
+	else if (v.is_number())
+		os << v.get_double();
+	else if (v.is_string())
+	{
+		os << "\"";
+
+		const auto* str = v.get_c_str();
+		while (*str)
+		{
+			if (str[0] == '\n')
+				os << "\\n";
+			else if (str[0] == '\r')
+				os << "\\r";
+			else if (str[0] == '"')
+				os << "\\\"";
+			else if (str[0] == '\\')
+				os << "\\\\";
+			else
+				os << *str;
+
+			++str;
+		}
+
+		os << "\"";
+	}
+	else if (v.is_array())
+	{
+		if (auto array = json5::array(v); !array.empty())
+		{
+			os << "[" << std::endl;
+			for (size_t i = 0, S = array.size(); i < S; ++i)
+			{
+				for (int i = 0; i <= depth; ++i) os << "  ";
+				to_stream(os, array[i], depth + 1);
+				if (i < S - 1) os << ",";
+				os << std::endl;
+			}
+
+			for (int i = 0; i < depth; ++i) os << "  ";
+			os << "]";
+		}
+		else
+			os << "[]";
+	}
+	else if (v.is_object())
+	{
+		if (auto object = json5::object(v); !object.empty())
+		{
+			os << "{" << std::endl;
+			size_t count = object.size();
+			for (auto kvp : object)
+			{
+				for (int i = 0; i <= depth; ++i) os << "  ";
+				os << kvp.first << ": ";
+				to_stream(os, kvp.second, depth + 1);
+				if (--count) os << ",";
+				os << std::endl;
+			}
+
+			for (int i = 0; i < depth; ++i) os << "  ";
+			os << "}";
+		}
+		else
+			os << "{}";
+	}
+
+	if (!depth)
+		os << std::endl;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void to_stream(std::ostream& os, const document& doc) { to_stream(os, doc.root(), 0); }
+
+//---------------------------------------------------------------------------------------------------------------------
+inline bool to_file(const std::string& fileName, const document& doc)
+{
+	std::ofstream ofs(fileName);
+	to_stream(ofs, doc);
+	return true;
 }
 
 //---------------------------------------------------------------------------------------------------------------------

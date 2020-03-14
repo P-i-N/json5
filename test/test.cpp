@@ -1,68 +1,36 @@
 #include <json5/json5.hpp>
 #include <json5/json5_reflect.hpp>
 
+#include <chrono>
 #include <iostream>
+
+//---------------------------------------------------------------------------------------------------------------------
+struct Stopwatch
+{
+	const char* name = "";
+	std::chrono::nanoseconds start = std::chrono::high_resolution_clock::now().time_since_epoch();
+
+	~Stopwatch()
+	{
+		auto duration = std::chrono::high_resolution_clock::now().time_since_epoch() - start;
+		std::cout << name << ": " << duration.count() / 1000000 << " ms" << std::endl;
+	}
+};
 
 //---------------------------------------------------------------------------------------------------------------------
 void PrintJSONValue(const json5::value& value, int depth = 0)
 {
-	if (value.is_null())
-		std::cout << "null";
-	else if (value.is_boolean())
-		std::cout << (value.get_bool() ? "true" : "false");
-	else if (value.is_integer())
-		std::cout << value.get_int();
-	else if (value.is_number())
-		std::cout << value.get_double();
-	else if (value.is_string())
-		std::cout << "\"" << value.get_c_str() << "\"";
-	else if (value.is_array())
-	{
-		std::cout << "[" << std::endl;
-
-		auto array = json5::array(value);
-		for (size_t i = 0, S = array.size(); i < S; ++i)
-		{
-			for (int i = 0; i <= depth; ++i) std::cout << "  ";
-			PrintJSONValue(array[i], depth + 1);
-			if (i < S - 1) std::cout << ",";
-			std::cout << std::endl;
-		}
-
-		for (int i = 0; i < depth; ++i) std::cout << "  ";
-		std::cout << "]";
-	}
-	else if (value.is_object())
-	{
-		std::cout << "{" << std::endl;
-
-		auto object = json5::object(value);
-		size_t count = object.size();
-		for (auto kvp : object)
-		{
-			for (int i = 0; i <= depth; ++i) std::cout << "  ";
-			std::cout << kvp.first << ": ";
-			PrintJSONValue(kvp.second, depth + 1);
-			if (--count) std::cout << ",";
-			std::cout << std::endl;
-		}
-
-		for (int i = 0; i < depth; ++i) std::cout << "  ";
-		std::cout << "}";
-	}
-
-	if (!depth)
-		std::cout << std::endl;
+	json5::to_stream(std::cout, value);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-void PrintError(const json5::error& err)
+bool PrintError(const json5::error& err)
 {
 	const char* errStr = "";
 
 	switch (err.type)
 	{
-		case json5::error::none: return;
+		case json5::error::none: return false;
 		case json5::error::invalid_root: errStr = "invalid root"; break;
 		case json5::error::unexpected_end: errStr = "unexpected end"; break;
 		case json5::error::syntax_error: errStr = "syntax error"; break;
@@ -78,12 +46,14 @@ void PrintError(const json5::error& err)
 	}
 
 	printf("Error at line %d, column %d: %s\n", err.line, err.column, errStr);
+	return true;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-	// Load from file
+	/// Load from file
+	if (false)
 	{
 		json5::document doc;
 		PrintError(json5::from_file("short_example.json5", doc));
@@ -91,7 +61,32 @@ int main(int argc, char* argv[])
 		PrintJSONValue(doc.root());
 	}
 
-	// Equality test
+	/// File load/save test
+	{
+		json5::document doc1;
+		json5::document doc2;
+		{
+			Stopwatch sw{ "Load twitter.json" };
+			PrintError(json5::from_file("twitter.json", doc1));
+		}
+
+		{
+			Stopwatch sw{ "Save twitter.json5" };
+			json5::to_file("twitter.json5", doc1);
+		}
+
+		{
+			Stopwatch sw{ "Reload twitter.json5" };
+			json5::from_file("twitter.json5", doc2);
+		}
+
+		if (doc1 == doc2)
+			std::cout << "doc1 == doc2" << std::endl;
+		else
+			std::cout << "doc1 != doc2" << std::endl;
+	}
+
+	/// Equality test
 	{
 		json5::document doc1;
 		json5::from_string("{ x: 1, y: 2, z: 3 }", doc1);
@@ -105,7 +100,7 @@ int main(int argc, char* argv[])
 			std::cout << "doc1 != doc2" << std::endl;
 	}
 
-	// String line breaks
+	/// String line breaks
 	{
 		json5::document doc;
 		PrintError(json5::from_string("{ text: 'Hello\\\n, world!' }", doc));
