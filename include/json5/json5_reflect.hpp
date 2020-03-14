@@ -320,17 +320,9 @@ inline error read(const object& obj, std::tuple<Types...>& t)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_stream(detail::writer& ctx, const T& value)
-{
-	detail::write(ctx, value);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-template <typename T>
 inline void to_stream(std::ostream& os, const T& value)
 {
-	detail::writer ctx{ os };
-	detail::write(ctx, value);
+	detail::write(detail::writer{ os }, value);
 }
 
 //---------------------------------------------------------------------------------------------------------------------

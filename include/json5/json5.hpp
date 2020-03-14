@@ -845,6 +845,8 @@ inline void to_stream(std::ostream& os, const char* str)
 			os << "\\n";
 		else if (str[0] == '\r')
 			os << "\\r";
+		else if (str[0] == '\t')
+			os << "\\t";
 		else if (str[0] == '"')
 			os << "\\\"";
 		else if (str[0] == '\\')
