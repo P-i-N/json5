@@ -465,11 +465,8 @@ inline error reader::parse_values(value::values_t& result)
 		if (auto err = peek_next_token(tt))
 			return err;
 
-		if (tt == token_type::array_end)
-		{
-			next(); // Consume ']'
+		if (tt == token_type::array_end && next()) // Consume ']'
 			return { error::none };
-		}
 		else if (expectComma)
 		{
 			expectComma = false;
@@ -505,18 +502,14 @@ inline error reader::peek_next_token(token_type& result)
 		}
 		else if (parsingComment != comment_type::none || ch <= 32)
 		{
-			if (parsingComment == comment_type::block && ch == '*')
+			if (parsingComment == comment_type::block && ch == '*' && next()) // Consume '*'
 			{
-				next(); // Consume '*'
-
 				if (peek() == '/')
 					parsingComment = comment_type::none;
 			}
 		}
-		else if (ch == '/')
+		else if (ch == '/' && next()) // Consume '/'
 		{
-			next(); // Consume '/'
-
 			if (peek() == '/')
 				parsingComment = comment_type::line;
 			else if (peek() == '*')
@@ -609,15 +602,10 @@ inline error reader::parse_string(unsigned& result)
 	while (!eof())
 	{
 		char ch = peek();
-		if ((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"'))
-		{
-			next(); // Consume '\'' or '"'
+		if (((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"')) && next()) // Consume '\'' or '"'
 			break;
-		}
-		else if (ch == '\\')
+		else if (ch == '\\' && next()) // Consume '\\'
 		{
-			next(); // Consume '\\'
-
 			ch = peek();
 			if (ch == '\n')
 				next();
@@ -658,10 +646,8 @@ inline error reader::parse_identifier(unsigned& result)
 	char firstCh = peek();
 	bool isString = (firstCh == '\'') || (firstCh == '"');
 
-	if (isString)
+	if (isString && next()) // Consume '\'' or '"'
 	{
-		next(); // Consume '\'' or '"'
-
 		char ch = peek();
 		if (!isalpha(ch) && ch != '_')
 			return make_error(error::syntax_error);

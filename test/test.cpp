@@ -53,7 +53,6 @@ bool PrintError(const json5::error& err)
 int main(int argc, char* argv[])
 {
 	/// Load from file
-	if (false)
 	{
 		json5::document doc;
 		PrintError(json5::from_file("short_example.json5", doc));
