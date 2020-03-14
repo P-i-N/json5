@@ -2,6 +2,7 @@
 
 #include "json5.hpp"
 
+#include <array>
 #include <map>
 
 #if !defined(JSON5_REFLECT)
@@ -100,6 +101,14 @@ inline void write_array(writer& w, const T* values, size_t numItems)
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
 inline void write(writer& w, const std::vector<T, A>& value) { write_array(w, value.data(), value.size()); }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, size_t N>
+inline void write(writer& w, const T(&value)[N]) { write_array(w, value, N); }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, size_t N>
+inline void write(writer& w, const std::array<T, N>&value) { write_array(w, value.data(), N); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
@@ -235,6 +244,32 @@ inline error read(const json5::value& in, std::string& out)
 	out = in.get_c_str();
 	return { error::none };
 }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline error read_array(const json5::value& in, T* out, size_t numItems)
+{
+	if (!in.is_array())
+		return { error::array_expected };
+
+	auto arr = json5::array(in);
+	if (arr.size() != numItems)
+		return { error::wrong_array_size };
+
+	for (size_t i = 0; i < numItems; ++i)
+		if (auto err = read(arr[i], out[i]))
+			return err;
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, size_t N>
+inline error read(const json5::value& in, T(&out)[N]) { return read_array(in, out, N); }
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, size_t N>
+inline error read(const json5::value& in, std::array<T, N>& out) { return read_array(in, out.data(), N); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>

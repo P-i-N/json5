@@ -187,7 +187,8 @@ struct error final
 		number_expected,
 		string_expected,
 		object_expected,
-		array_expected
+		array_expected,
+		wrong_array_size
 	};
 
 	int type = none;

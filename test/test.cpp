@@ -57,7 +57,6 @@ int main(int argc, char* argv[])
 	{
 		json5::document doc;
 		PrintError(json5::from_file("short_example.json5", doc));
-
 		PrintJSONValue(doc.root());
 	}
 
@@ -104,7 +103,6 @@ int main(int argc, char* argv[])
 	{
 		json5::document doc;
 		PrintError(json5::from_string("{ text: 'Hello\\\n, world!' }", doc));
-
 		PrintJSONValue(doc.root());
 	}
 
@@ -128,7 +126,9 @@ int main(int argc, char* argv[])
 			std::vector<int> numbers = { 1, 2, 3, 4, 5 };
 			std::map<std::string, Bar> barMap = { { "x", { "a", 1 } }, { "y", { "b", 2 } }, { "z", { "c", 3 } } };
 
-			JSON5_REFLECT(x, y, z, text, numbers, barMap)
+			std::array<float, 3> position = { 10.0f, 20.0f, 30.0f };
+
+			JSON5_REFLECT(x, y, z, text, numbers, barMap, position)
 			bool operator==(const Foo& o) const noexcept { return make_tuple() == o.make_tuple(); }
 		};
 
