@@ -836,6 +836,27 @@ void document::assign_rvalue(document&& rValue) noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline void to_stream(std::ostream& os, const error& err)
+{
+	const char* errStrings[] =
+	{
+		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
+		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
+		"number expected", "string expected", "object expected", "array expected", "wrong array size"
+	};
+
+	os << errStrings[err.type] << " at " << err.line << ":" << err.column;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline std::string to_string(const error& err)
+{
+	std::ostringstream os;
+	to_stream(os, err);
+	return os.str();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline void to_stream(std::ostream& os, const char* str)
 {
 	os << "\"";
@@ -921,6 +942,22 @@ inline void to_stream(std::ostream& os, const value& v, int depth = 0)
 
 //---------------------------------------------------------------------------------------------------------------------
 inline void to_stream(std::ostream& os, const document& doc) { to_stream(os, doc.root(), 0); }
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void to_string(std::string& str, const document& doc)
+{
+	std::ostringstream os;
+	to_stream(os, doc);
+	str = os.str();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline std::string to_string(const document& doc)
+{
+	std::string result;
+	to_string(result, doc);
+	return result;
+}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline bool to_file(const std::string& fileName, const document& doc)

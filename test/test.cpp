@@ -27,27 +27,13 @@ void PrintJSONValue(const json5::value& value, int depth = 0)
 //---------------------------------------------------------------------------------------------------------------------
 bool PrintError(const json5::error& err)
 {
-	const char* errStr = "";
-
-	switch (err.type)
+	if (err)
 	{
-		case json5::error::none: return false;
-		case json5::error::invalid_root: errStr = "invalid root"; break;
-		case json5::error::unexpected_end: errStr = "unexpected end"; break;
-		case json5::error::syntax_error: errStr = "syntax error"; break;
-		case json5::error::invalid_literal: errStr = "invalid literal"; break;
-		case json5::error::invalid_escape_seq: errStr = "invalid escape sequence"; break;
-		case json5::error::comma_expected: errStr = "comma expected"; break;
-		case json5::error::colon_expected: errStr = "colon expected"; break;
-		case json5::error::boolean_expected: errStr = "boolean expected"; break;
-		case json5::error::number_expected: errStr = "number expected"; break;
-		case json5::error::string_expected: errStr = "string expected"; break;
-		case json5::error::object_expected: errStr = "object expected"; break;
-		case json5::error::array_expected: errStr = "array expected"; break;
+		std::cout << json5::to_string(err) << std::endl;
+		return true;
 	}
 
-	printf("Error at line %d, column %d: %s\n", err.line, err.column, errStr);
-	return true;
+	return false;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
