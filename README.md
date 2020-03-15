@@ -28,6 +28,10 @@ json5::to_file("settings.json", s);
 ```
 
 ## Overview
+
+### `json5::document`
+This is the main data structure for all library operations. It is an **immutable** container of all values, strings, objects and holds finished parsed representation of your JSON data.
+
 Most parsing, reading and writing operations are done with `json5::from_`* and `json5::to_`* functions:
 
 **`json5::from_file`** - loads and parses JSON data from file into *`json5::document`* instance:
@@ -71,13 +75,13 @@ if (auto err = json5::from_file("settings.json", s))
 
 ### Library data types
 
-### `json5::document`
-
 ### `json5::value`
 
 ### `json5::object`
 
 ### `json5::array`
+
+### `json5::builder`
 
 ## Reflection API
 
