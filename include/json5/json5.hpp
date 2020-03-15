@@ -13,12 +13,14 @@
 
 namespace json5::detail {
 
-struct reader;
+class reader;
+
+using string_offset = unsigned;
 
 struct hashed_string_ref
 {
 	size_t hash = 0;
-	size_t offset = 0;
+	string_offset offset = 0;
 
 	bool operator==(const hashed_string_ref& other) const noexcept { return hash == other.hash; }
 };
@@ -79,9 +81,9 @@ private:
 	using values_t = std::vector<value>;
 	using pointer_map_t = std::unordered_map<size_t, size_t>;
 
-	value(const class document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
 	value(const class document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
 	value(const class document* doc, values_t& vals) : _type(value_type::array), _values(&vals) { }
+	value(const class document* doc, detail::string_offset o) noexcept: _doc(doc), _offset(o | size_t_msbit) { }
 
 	void relink(const class document* newDoc, pointer_map_t* ptrMap = nullptr) noexcept;
 
@@ -243,54 +245,19 @@ public:
 	document& doc() noexcept { return _doc; }
 	const document& doc() const noexcept { return _doc; }
 
-	auto string_buffer_offset() const noexcept { return static_cast<unsigned>(_doc._stringBuffer.size()); }
+	detail::string_offset string_buffer_offset() const noexcept;
+	detail::string_offset string_buffer_add(std::string_view str);
 	void string_buffer_add(char ch) { _doc._stringBuffer.push_back(ch); }
-	auto string_buffer_add(std::string_view str)
-	{
-		auto offset = string_buffer_offset();
-		_doc._stringBuffer += str;
-		_doc._stringBuffer.push_back(0);
-		return offset;
-	}
 
+	value new_string(detail::string_offset stringOffset) { return value(&_doc, stringOffset); }
 	value new_string(std::string_view str) { return value(&_doc, string_buffer_add(str)); }
 
-	value& push_object()
-	{
-		auto v = value(&_doc, *_doc._propertiesBuffer.emplace_back(new value::properties_t()));
-		return _stack.emplace_back(v);
-	}
+	value& push_object();
+	value& push_array();
+	void pop();
 
-	value& push_array()
-	{
-		auto v = value(&_doc, *_doc._valuesBuffer.emplace_back(new value::values_t()));
-		return _stack.emplace_back(v);
-	}
-
-	void pop()
-	{
-		if (_stack.size() == 1)
-			_doc._root = _stack.back();
-
-		_stack.pop_back();
-	}
-
-	builder& operator+=(value v)
-	{
-		_stack.back()._values->push_back(v);
-		return *this;
-	}
-
-	value& operator[](unsigned keyOffset)
-	{
-		detail::hashed_string_ref hashedKey;
-		hashedKey.offset = keyOffset;
-		auto sv = std::string_view(_doc._stringBuffer.data() + hashedKey.offset);
-		hashedKey.hash = std::hash<std::string_view>()(sv);
-
-		return (*_stack.back()._properties)[hashedKey];
-	}
-
+	builder& operator+=(value v);
+	value& operator[](detail::string_offset keyOffset);
 	value& operator[](std::string_view key) { return (*this)[string_buffer_add(key)]; }
 
 protected:
@@ -302,8 +269,6 @@ protected:
 
 namespace detail {
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 enum class token_type
 {
 	unknown, identifier, string, number, colon, comma,
@@ -311,76 +276,57 @@ enum class token_type
 	literal_true, literal_false, literal_null
 };
 
-struct reader final : builder
+class reader final : builder
 {
-	document& doc;
-	std::istream& is;
-
-	int line = 1;
-	int column = 1;
+public:
+	reader(document& doc, std::istream& is): builder(doc), _is(is) { }
 
 	char next();
-	char peek() { return is.peek(); }
-	bool eof() const { return is.eof(); }
-	error make_error(int type) const noexcept { return error{ type, line, column }; }
+	char peek() { return _is.peek(); }
+	bool eof() const { return _is.eof(); }
+	error make_error(int type) const noexcept { return error{ type, _line, _column }; }
 
 	error parse();
 	error parse_value(value& result);
-	error parse_properties(value::properties_t& result);
-	error parse_values(value::values_t& result);
+	error parse_object();
+	error parse_array();
 	error peek_next_token(token_type& result);
 	error parse_number(double& result);
-	error parse_string(unsigned& result);
-	error parse_identifier(unsigned& result);
+	error parse_string(detail::string_offset& result);
+	error parse_identifier(detail::string_offset& result);
 	error parse_literal(token_type& result);
+
+private:
+	std::istream& _is;
+	int _line = 1;
+	int _column = 1;
 };
 
 //---------------------------------------------------------------------------------------------------------------------
 inline char reader::next()
 {
-	if (is.peek() == '\n')
+	if (_is.peek() == '\n')
 	{
-		column = 0;
-		++line;
+		_column = 0;
+		++_line;
 	}
 
-	++column;
-	return is.get();
+	++_column;
+	return _is.get();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline error reader::parse()
 {
-	doc._root = value();
+	_doc._root = value();
+	_doc._stringBuffer.clear();
+	_doc._stringBuffer.push_back(0);
 
-	doc._stringBuffer.clear();
-	doc._stringBuffer.push_back(0);
-
-	token_type tt = token_type::unknown;
-	if (auto err = peek_next_token(tt))
+	if (auto err = parse_value(_doc._root))
 		return err;
 
-	switch (tt)
-	{
-		case token_type::array_begin:
-		{
-			doc._root = doc.make_array();
-			if (auto err = parse_values(*doc._root._values))
-				return err;
-		}
-		break;
-
-		case token_type::object_begin:
-		{
-			doc._root = doc.make_object();
-			if (auto err = parse_properties(*doc._root._properties))
-				return err;
-		}
-		break;
-
-		default:
-			return make_error(error::invalid_root);
-	}
+	if (!_doc._root.is_array() && !_doc._root.is_object())
+		return make_error(error::invalid_root);
 
 	return { error::none };
 }
@@ -405,10 +351,10 @@ inline error reader::parse_value(value& result)
 
 		case token_type::string:
 		{
-			if (unsigned offset = 0; auto err = parse_string(offset))
+			if (detail::string_offset offset = 0; auto err = parse_string(offset))
 				return err;
 			else
-				result = value(&doc, offset);
+				result = new_string(offset);
 		}
 		break;
 
@@ -432,17 +378,23 @@ inline error reader::parse_value(value& result)
 
 		case token_type::object_begin:
 		{
-			result = doc.make_object();
-			if (auto err = parse_properties(*result._properties))
-				return err;
+			result = push_object();
+			{
+				if (auto err = parse_object())
+					return err;
+			}
+			pop();
 		}
 		break;
 
 		case token_type::array_begin:
 		{
-			result = doc.make_array();
-			if (auto err = parse_values(*result._values))
-				return err;
+			result = push_array();
+			{
+				if (auto err = parse_array())
+					return err;
+			}
+			pop();
 		}
 		break;
 
@@ -454,7 +406,7 @@ inline error reader::parse_value(value& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_properties(value::properties_t& result)
+inline error reader::parse_object()
 {
 	next(); // Consume '{'
 
@@ -465,7 +417,7 @@ inline error reader::parse_properties(value::properties_t& result)
 		if (auto err = peek_next_token(tt))
 			return err;
 
-		unsigned keyOffset;
+		detail::string_offset keyOffset;
 
 		switch (tt)
 		{
@@ -508,13 +460,7 @@ inline error reader::parse_properties(value::properties_t& result)
 		if (auto err = parse_value(newValue))
 			return err;
 
-		detail::hashed_string_ref hashedKey;
-		hashedKey.offset = keyOffset;
-
-		auto sv = std::string_view(doc._stringBuffer.data() + hashedKey.offset);
-		hashedKey.hash = std::hash<std::string_view>()(sv);
-
-		result.insert({ hashedKey, newValue });
+		(*this)[keyOffset] = newValue;
 		expectComma = true;
 	}
 
@@ -522,7 +468,7 @@ inline error reader::parse_properties(value::properties_t& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_values(value::values_t& result)
+inline error reader::parse_array()
 {
 	next(); // Consume '['
 
@@ -546,9 +492,11 @@ inline error reader::parse_values(value::values_t& result)
 			continue;
 		}
 
-		if (auto err = parse_value(result.emplace_back()))
+		value newValue;
+		if (auto err = parse_value(newValue))
 			return err;
 
+		(*this) += newValue;
 		expectComma = true;
 	}
 
@@ -631,26 +579,19 @@ inline error reader::peek_next_token(token_type& result)
 //---------------------------------------------------------------------------------------------------------------------
 inline error reader::parse_number(double& result)
 {
-	auto& strBuffer = doc._stringBuffer;
-	size_t offset = strBuffer.size();
+	char buff[256] = { };
 	size_t length = 0;
 
-	while (!eof())
+	while (!eof() && length < sizeof(buff))
 	{
-		strBuffer.push_back(next());
-		++length;
+		buff[length++] = next();
 
 		char ch = peek();
 		if (ch <= 32 || ch == ',' || ch == '}' || ch == ']')
 			break;
 	}
 
-	strBuffer.push_back(0);
-
-	auto convResult = std::from_chars(
-		strBuffer.data() + offset,
-		strBuffer.data() + offset + length,
-		result);
+	auto convResult = std::from_chars(buff, buff + length, result);
 
 	if (convResult.ec != std::errc())
 		return make_error(error::syntax_error);
@@ -659,13 +600,12 @@ inline error reader::parse_number(double& result)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_string(unsigned& result)
+inline error reader::parse_string(detail::string_offset& result)
 {
 	bool singleQuoted = peek() == '\'';
 	next(); // Consume '\'' or '"'
 
-	auto& strBuffer = doc._stringBuffer;
-	result = static_cast<unsigned>(strBuffer.size());
+	result = string_buffer_offset();
 
 	while (!eof())
 	{
@@ -678,38 +618,37 @@ inline error reader::parse_string(unsigned& result)
 			if (ch == '\n')
 				next();
 			else if (ch == 't' && next())
-				strBuffer.push_back('\t');
+				string_buffer_add('\t');
 			else if (ch == 'n' && next())
-				strBuffer.push_back('\n');
+				string_buffer_add('\n');
 			else if (ch == 'r' && next())
-				strBuffer.push_back('\r');
+				string_buffer_add('\r');
 			else if (ch == '\\' && next())
-				strBuffer.push_back('\\');
+				string_buffer_add('\\');
 			else if (ch == '\'' && next())
-				strBuffer.push_back('\'');
+				string_buffer_add('\'');
 			else if (ch == '"' && next())
-				strBuffer.push_back('"');
+				string_buffer_add('"');
 			else if (ch == '\\' && next())
-				strBuffer.push_back('\\');
+				string_buffer_add('\\');
 			else
 				return make_error(error::invalid_escape_seq);
 		}
 		else
-			strBuffer.push_back(next());
+			string_buffer_add(next());
 	}
 
 	if (eof())
 		return make_error(error::unexpected_end);
 
-	strBuffer.push_back(0);
+	string_buffer_add(0);
 	return { error::none };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_identifier(unsigned& result)
+inline error reader::parse_identifier(detail::string_offset& result)
 {
-	auto& strBuffer = doc._stringBuffer;
-	result = static_cast<unsigned>(strBuffer.size());
+	result = string_buffer_offset();
 
 	char firstCh = peek();
 	bool isString = (firstCh == '\'') || (firstCh == '"');
@@ -723,7 +662,7 @@ inline error reader::parse_identifier(unsigned& result)
 
 	while (!eof())
 	{
-		strBuffer.push_back(next());
+		string_buffer_add(next());
 
 		char ch = peek();
 		if (!isalpha(ch) && !isdigit(ch) && ch != '_')
@@ -733,7 +672,7 @@ inline error reader::parse_identifier(unsigned& result)
 	if (isString && firstCh != next()) // Consume '\'' or '"'
 		return make_error(error::syntax_error);
 
-	strBuffer.push_back(0);
+	string_buffer_add(0);
 	return { error::none };
 }
 
@@ -900,6 +839,62 @@ void document::assign_rvalue(document&& rValue) noexcept
 	for (const auto& vals : _valuesBuffer)
 		for (auto& v : *vals)
 			v.relink(this);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline detail::string_offset builder::string_buffer_offset() const noexcept
+{
+	return static_cast<detail::string_offset>(_doc._stringBuffer.size());
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline detail::string_offset builder::string_buffer_add(std::string_view str)
+{
+	auto offset = string_buffer_offset();
+	_doc._stringBuffer += str;
+	_doc._stringBuffer.push_back(0);
+	return offset;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value& builder::push_object()
+{
+	auto v = value(&_doc, *_doc._propertiesBuffer.emplace_back(new value::properties_t()));
+	return _stack.emplace_back(v);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value& builder::push_array()
+{
+	auto v = value(&_doc, *_doc._valuesBuffer.emplace_back(new value::values_t()));
+	return _stack.emplace_back(v);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void builder::pop()
+{
+	if (_stack.size() == 1)
+		_doc._root = _stack.back();
+
+	_stack.pop_back();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline builder& builder::operator+=(value v)
+{
+	_stack.back()._values->push_back(v);
+	return *this;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value& builder::operator[](detail::string_offset keyOffset)
+{
+	detail::hashed_string_ref hashedKey;
+	hashedKey.offset = keyOffset;
+	auto sv = std::string_view(_doc._stringBuffer.data() + hashedKey.offset);
+	hashedKey.hash = std::hash<std::string_view>()(sv);
+
+	return (*_stack.back()._properties)[hashedKey];
 }
 
 //---------------------------------------------------------------------------------------------------------------------

@@ -19,7 +19,7 @@ struct Stopwatch
 };
 
 //---------------------------------------------------------------------------------------------------------------------
-void PrintJSONValue(const json5::value& value, int depth = 0)
+void PrintJSONValue(const json5::value& value)
 {
 	json5::to_stream(std::cout, value);
 }
@@ -47,17 +47,14 @@ int main(int argc, char* argv[])
 		b.push_object();
 		{
 			b["x"] = b.new_string("Hello!");
-			b["y"] = b.new_string("123");
-			b["z"] = b.new_string("OMG WTF");
+			b["y"] = 123.0;
+			b["z"] = true;
 			b["n"] = nullptr;
 		}
 		b.pop();
 
-		doc = b.doc();
 		std::cout << json5::to_string(doc);
 	}
-
-	return 0;
 
 	/// Load from file
 	{
