@@ -39,6 +39,26 @@ bool PrintError(const json5::error& err)
 //---------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
+	/// Build
+	{
+		json5::document doc;
+		json5::builder b(doc);
+
+		b.push_object();
+		{
+			b["x"] = b.new_string("Hello!");
+			b["y"] = b.new_string("123");
+			b["z"] = b.new_string("OMG WTF");
+			b["n"] = nullptr;
+		}
+		b.pop();
+
+		doc = b.doc();
+		std::cout << json5::to_string(doc);
+	}
+
+	return 0;
+
 	/// Load from file
 	{
 		json5::document doc;

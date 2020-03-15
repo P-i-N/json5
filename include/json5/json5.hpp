@@ -48,6 +48,9 @@ class value final
 
 public:
 	value() noexcept = default;
+	value(std::nullptr_t) noexcept { };
+	value(bool val) noexcept : _type(value_type::boolean), _boolean(val) { }
+	value(double val) noexcept : _type(value_type::number), _number(val) { }
 
 	value_type type() const noexcept;
 
@@ -76,8 +79,6 @@ private:
 	using values_t = std::vector<value>;
 	using pointer_map_t = std::unordered_map<size_t, size_t>;
 
-	value(bool val) noexcept : _type(value_type::boolean), _boolean(val) { }
-	value(double val) noexcept : _type(value_type::number), _number(val) { }
 	value(const class document* doc, unsigned offset) noexcept : _doc(doc), _offset(offset | size_t_msbit) { }
 	value(const class document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
 	value(const class document* doc, values_t& vals) : _type(value_type::array), _values(&vals) { }
@@ -116,6 +117,7 @@ private:
 	friend class document;
 	friend class object;
 	friend class array;
+	friend class builder;
 	friend detail::reader;
 };
 
@@ -223,19 +225,84 @@ private:
 	std::vector<std::unique_ptr<value::properties_t>> _propertiesBuffer;
 	std::vector<std::unique_ptr<value::values_t>> _valuesBuffer;
 
-	value make_object() { return value(this, *_propertiesBuffer.emplace_back(new value::properties_t())); }
-	value make_array() { return value(this, *_valuesBuffer.emplace_back(new value::values_t())); }
-
 	value _root;
 
 	friend value;
 	friend object;
+	friend class builder;
 	friend detail::reader;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+class builder
+{
+public:
+	builder(document& doc) : _doc(doc) { }
+
+	document& doc() noexcept { return _doc; }
+	const document& doc() const noexcept { return _doc; }
+
+	auto string_buffer_offset() const noexcept { return static_cast<unsigned>(_doc._stringBuffer.size()); }
+	void string_buffer_add(char ch) { _doc._stringBuffer.push_back(ch); }
+	auto string_buffer_add(std::string_view str)
+	{
+		auto offset = string_buffer_offset();
+		_doc._stringBuffer += str;
+		_doc._stringBuffer.push_back(0);
+		return offset;
+	}
+
+	value new_string(std::string_view str) { return value(&_doc, string_buffer_add(str)); }
+
+	value& push_object()
+	{
+		auto v = value(&_doc, *_doc._propertiesBuffer.emplace_back(new value::properties_t()));
+		return _stack.emplace_back(v);
+	}
+
+	value& push_array()
+	{
+		auto v = value(&_doc, *_doc._valuesBuffer.emplace_back(new value::values_t()));
+		return _stack.emplace_back(v);
+	}
+
+	void pop()
+	{
+		if (_stack.size() == 1)
+			_doc._root = _stack.back();
+
+		_stack.pop_back();
+	}
+
+	builder& operator+=(value v)
+	{
+		_stack.back()._values->push_back(v);
+		return *this;
+	}
+
+	value& operator[](unsigned keyOffset)
+	{
+		detail::hashed_string_ref hashedKey;
+		hashedKey.offset = keyOffset;
+		auto sv = std::string_view(_doc._stringBuffer.data() + hashedKey.offset);
+		hashedKey.hash = std::hash<std::string_view>()(sv);
+
+		return (*_stack.back()._properties)[hashedKey];
+	}
+
+	value& operator[](std::string_view key) { return (*this)[string_buffer_add(key)]; }
+
+protected:
+	document& _doc;
+	std::vector<value> _stack;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 namespace detail {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 enum class token_type
 {
@@ -244,7 +311,7 @@ enum class token_type
 	literal_true, literal_false, literal_null
 };
 
-struct reader final
+struct reader final : builder
 {
 	document& doc;
 	std::istream& is;
