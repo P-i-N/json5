@@ -17,36 +17,6 @@ namespace json5 {
 
 namespace detail {
 
-struct writer final
-{
-	std::ostream& os;
-	int depth = 0;
-	const char* indent_str = "  ";
-
-	void indent() { for (int i = 0; i < depth; ++i) os << indent_str; }
-};
-
-struct writer_scope final
-{
-	writer& wr;
-	const char* scope_chars;
-
-	writer_scope(writer& w, const char* ch): wr(w), scope_chars(ch)
-	{
-		wr.os << scope_chars[0] << std::endl;
-		++wr.depth;
-	}
-
-	~writer_scope()
-	{
-		--wr.depth;
-		wr.indent();
-		wr.os << scope_chars[1];
-	}
-};
-
-template <typename T> struct inherits final { using type = T; };
-
 //---------------------------------------------------------------------------------------------------------------------
 inline std::string_view get_name_slice(const char* names, size_t index)
 {
@@ -66,121 +36,82 @@ inline std::string_view get_name_slice(const char* names, size_t index)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void write(writer& w, bool value) { w.os << (value ? "true" : "false"); }
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void write(writer& w, int value) { w.os << value; }
-inline void write(writer& w, float value) { w.os << value; }
-inline void write(writer& w, double value) { w.os << value; }
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void write(writer& w, const char* value) { json5::to_stream(w.os, value); }
-inline void write(writer& w, const std::string& value) { write(w, value.c_str()); }
+inline json5::value write(builder& b, bool in) { return json5::value(in); }
+inline json5::value write(builder& b, int in) { return json5::value(static_cast<double>(in)); }
+inline json5::value write(builder& b, float in) { return json5::value(static_cast<double>(in)); }
+inline json5::value write(builder& b, double in) { return json5::value(in); }
+inline json5::value write(builder& b, const char* in) { return b.new_string(in); }
+inline json5::value write(builder& b, const std::string& in) { return b.new_string(in); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void write_array(writer& w, const T* values, size_t numItems)
+inline json5::value write_array(builder& b, const T* in, size_t numItems)
 {
-	if (numItems)
-	{
-		writer_scope _(w, "[]");
+	b.push_array();
 
-		for (size_t i = 0; i < numItems; ++i)
-		{
-			w.indent();
-			write(w, values[i]);
+	for (size_t i = 0; i < numItems; ++i)
+		b += write(b, in[i]);
 
-			if (i < numItems - 1) w.os << ",";
-			w.os << std::endl;
-		}
-	}
-	else
-		w.os << "[]";
+	return b.pop();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline void write(writer& w, const std::vector<T, A>& value) { write_array(w, value.data(), value.size()); }
+inline json5::value write(builder& b, const std::vector<T, A>& in) { return write_array(b, in.data(), in.size()); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline void write(writer& w, const T(&value)[N]) { write_array(w, value, N); }
+inline json5::value write(builder& b, const T(&in)[N]) { return write_array(b, in, N); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline void write(writer& w, const std::array<T, N>&value) { write_array(w, value.data(), N); }
+inline json5::value write(builder& b, const std::array<T, N>& in) { return write_array(b, in.data(), N); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void write_map(writer& w, const T& value)
+inline json5::value write_map(builder& b, const T& in)
 {
-	if (!value.empty())
-	{
-		writer_scope _(w, "{}");
+	b.push_object();
 
-		size_t count = value.size();
-		for (const auto& kvp : value)
-		{
-			w.indent();
-			write(w, kvp.first);
-			w.os << ": ";
-			write(w, kvp.second);
+	for (const auto& kvp : in)
+		b[kvp.first] = write(b, kvp.second);
 
-			if (--count) w.os << ",";
-			w.os << std::endl;
-		}
-	}
-	else
-		w.os << "{}";
+	return b.pop();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline void write(writer& w, const std::map<K, T, P, A>& value) { write_map(w, value); }
+inline json5::value write(builder& b, const std::map<K, T, P, A>& in) { return write_map(b, in); }
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline void write(writer& w, const std::unordered_map<K, T, H, EQ, A>& value) { write_map(w, value); }
+inline json5::value write(builder& b, const std::unordered_map<K, T, H, EQ, A>& in) { return write_map(b, in); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline void write(writer& w, const std::tuple<Types...>& t)
+inline void write(builder& b, const std::tuple<Types...>& t)
 {
-	const auto& value = std::get<I>(t);
-	using Type = std::remove_reference_t<decltype(value)>;
+	const auto& in = std::get<I>(t);
+	using Type = std::remove_reference_t<decltype(in)>;
 
-	auto name = get_name_slice(std::get<0>(t), I - 1);
-
-	if (!name.empty())
+	if (auto name = detail::get_name_slice(std::get<0>(t), I - 1); !name.empty())
 	{
-		w.indent();
-		w.os << name << ": ";
-
 		if constexpr (std::is_enum_v<Type>)
-			write(w, std::underlying_type_t<Type>(value));
+			b[name] = write(b, std::underlying_type_t<Type>(in));
 		else
-			write(w, value);
-
-		if constexpr (I + 1 != sizeof...(Types))
-			w.os << ",";
-
-		w.os << std::endl;
+			b[name] = write(b, in);
 	}
 
 	if constexpr (I + 1 != sizeof...(Types))
-		write<I + 1>(w, t);
+		write<I + 1>(b, t);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void write(writer& w, const T& value)
+inline json5::value write(builder& b, const T& in)
 {
-	{
-		writer_scope _(w, "{}");
-		write(w, value.make_named_tuple());
-	}
-
-	if (!w.depth)
-		w.os << std::endl;
+	b.push_object();
+	write(b, in.make_named_tuple());
+	return b.pop();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -360,18 +291,28 @@ inline error read(const json5::object& obj, std::tuple<Types...>& t)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
+inline void to_document(document& doc, const T& value)
+{
+	builder b(doc);
+	detail::write(b, value);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
 inline void to_stream(std::ostream& os, const T& value)
 {
-	detail::write(detail::writer{ os }, value);
+	document doc;
+	to_document(doc, value);
+	to_stream(os, doc);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
 inline void to_string(std::string& str, const T& value)
 {
-	std::ostringstream os;
-	to_stream(os, value);
-	str = os.str();
+	document doc;
+	to_document(doc, value);
+	to_string(str, doc);
 }
 
 //---------------------------------------------------------------------------------------------------------------------

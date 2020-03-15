@@ -252,9 +252,9 @@ public:
 	value new_string(detail::string_offset stringOffset) { return value(&_doc, stringOffset); }
 	value new_string(std::string_view str) { return value(&_doc, string_buffer_add(str)); }
 
-	value& push_object();
-	value& push_array();
-	void pop();
+	void push_object();
+	void push_array();
+	value pop();
 
 	builder& operator+=(value v);
 	value& operator[](detail::string_offset keyOffset);
@@ -378,23 +378,23 @@ inline error reader::parse_value(value& result)
 
 		case token_type::object_begin:
 		{
-			result = push_object();
+			push_object();
 			{
 				if (auto err = parse_object())
 					return err;
 			}
-			pop();
+			result = pop();
 		}
 		break;
 
 		case token_type::array_begin:
 		{
-			result = push_array();
+			push_array();
 			{
 				if (auto err = parse_array())
 					return err;
 			}
-			pop();
+			result = pop();
 		}
 		break;
 
@@ -857,26 +857,28 @@ inline detail::string_offset builder::string_buffer_add(std::string_view str)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value& builder::push_object()
+inline void builder::push_object()
 {
 	auto v = value(&_doc, *_doc._propertiesBuffer.emplace_back(new value::properties_t()));
-	return _stack.emplace_back(v);
+	_stack.emplace_back(v);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value& builder::push_array()
+inline void builder::push_array()
 {
 	auto v = value(&_doc, *_doc._valuesBuffer.emplace_back(new value::values_t()));
-	return _stack.emplace_back(v);
+	_stack.emplace_back(v);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void builder::pop()
+inline value builder::pop()
 {
+	json5::value result = _stack.back();
 	if (_stack.size() == 1)
-		_doc._root = _stack.back();
+		_doc._root = result;
 
 	_stack.pop_back();
+	return result;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
