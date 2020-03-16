@@ -60,7 +60,6 @@ public:
 	bool is_string() const noexcept { return type() == value_type::string; }
 	bool is_object() const noexcept { return type() == value_type::object; }
 	bool is_array() const noexcept { return type() == value_type::array; }
-	bool is_integer() const noexcept { double _; return is_number() && (std::modf(_number, &_) == 0.0); }
 
 	bool get_bool(bool val = false) const noexcept { return is_boolean() ? _boolean : val; }
 	int get_int(int val = 0) const noexcept { return is_number() ? static_cast<int>(_number) : val; }
@@ -973,10 +972,13 @@ inline void to_stream(std::ostream& os, const value& v, int depth = 0)
 		os << "null";
 	else if (v.is_boolean())
 		os << (v.get_bool() ? "true" : "false");
-	else if (v.is_integer())
-		os << v.get_int64();
 	else if (v.is_number())
-		os << v.get_double();
+	{
+		if (double _, d = v.get_double(); modf(d, &_) == 0.0)
+			os << v.get_int64();
+		else
+			os << d;
+	}
 	else if (v.is_string())
 		to_stream(os, v.get_c_str());
 	else if (v.is_array())
