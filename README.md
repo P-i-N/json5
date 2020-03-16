@@ -30,9 +30,7 @@ json5::to_file("settings.json", s);
 ## Overview
 
 ### `json5::document`
-This is the main data structure for all library operations. It is an **immutable** container of all values, strings, objects and holds finished parsed representation of your JSON data.
-
-Most parsing, reading and writing operations are done with `json5::from_`* and `json5::to_`* functions:
+This is the root data structure for all library operations. It is an **immutable** container of all values, strings, objects and holds finished parsed representation of your JSON data. You can initialize `json5::document` either by using `json5::builder` (see below) or by using `json5::from_`* functions:
 
 **`json5::from_file`** - loads and parses JSON data from file into *`json5::document`* instance:
 ```cpp
@@ -58,9 +56,18 @@ if (auto err = json5::from_stream(myInputStream, doc))
 ```
 
 ### Writing
-- `json5::to_file`
-- `json5::to_string`
-- `json5::to_stream`
+**TBD**
+
+**`json5::to_file`** - saves `json5::document` instance content into a file
+
+**`json5::to_string`** - serializes `json5::document` instance into a string
+
+**`json5::to_stream`** - serializes `json5::document` instance to a stream
+
+### Building
+
+### `json5::builder`
+**TBD**
 
 ### Error reporting
 
@@ -74,6 +81,7 @@ if (auto err = json5::from_file("settings.json", s))
 ```
 
 ### Library data types
+**TBD**
 
 ### `json5::value`
 
@@ -81,8 +89,57 @@ if (auto err = json5::from_file("settings.json", s))
 
 ### `json5::array`
 
-### `json5::builder`
-
 ## Reflection API
 
 ### `JSON5_REFLECT(...)`
+**TBD**
+
+### Basic supported types
+- `bool`
+- `int`, `float`, `double`
+- `std::string`
+- `std::vector`, `std::map`, `std::unordered_map`, `std::array`
+- `C array`
+
+### Extending with other types
+```cpp
+// Let's have a 3D vector struct:
+struct vec3 { float x, y, z; };
+
+namespace json5::detail {
+
+// Write vec3 as JSON array of 3 numbers
+inline json5::value write(builder& b, const vec3 &in)
+{
+	b.push_array();
+	b += write(b, in.x);
+	b += write(b, in.y);
+	b += write(b, in.z);
+	return b.pop();
+}
+
+// Read vec3 from JSON array
+inline error read(const json5::value& in, vec3& out)
+{
+	if (!in.is_array())
+		return { error::array_expected };
+
+	auto arr = json5::array(in);
+
+	if (arr.size() != 3)
+		return { error::wrong_array_size };
+
+	if (auto err = read(arr[0], out.x))
+		return err;
+
+	if (auto err = read(arr[1], out.y))
+		return err;
+
+	if (auto err = read(arr[2], out.z))
+		return err;
+
+	return { error::none };
+}
+
+} // namespace json5::detail
+```
