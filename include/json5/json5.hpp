@@ -42,12 +42,10 @@ template <> struct hash<json5::detail::hashed_string_ref>
 
 namespace json5 {
 
-enum class value_type : size_t { null = 0, boolean, number, string, object, array };
+enum class value_type : size_t { null = 0, boolean, number, array, string, object };
 
 class value final
 {
-	static constexpr size_t size_t_msbit = (static_cast<size_t>(1) << (sizeof(size_t) * 8 - 1));
-
 public:
 	value() noexcept = default;
 	value(std::nullptr_t) noexcept { };
@@ -83,7 +81,7 @@ private:
 
 	value(const class document* doc, properties_t& props) noexcept : _doc(doc), _properties(&props) { }
 	value(const class document* doc, values_t& vals) : _type(value_type::array), _values(&vals) { }
-	value(const class document* doc, detail::string_offset o) noexcept: _doc(doc), _offset(o | size_t_msbit) { }
+	value(const class document* doc, detail::string_offset o) noexcept: _doc(doc), _offset((o << 2u) | 3u) { }
 
 	void relink(const class document* newDoc, pointer_map_t* ptrMap = nullptr) noexcept;
 
@@ -101,6 +99,12 @@ private:
 		return emptyArray;
 	}
 
+	//       _type == 0: type::null
+	//       _type == 1: type::boolean
+	//       _type == 2: type::number
+	//       _type == 3: type::array
+	// _doc lower bit=0: type::object
+	// _doc lower bit=1: type::string
 	union
 	{
 		value_type _type = value_type::null;
@@ -268,6 +272,22 @@ protected:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
+
+struct property_map
+{
+	size_t size = 0;
+	size_t* buckets = nullptr;
+
+	struct item
+	{
+		size_t hash = 0;
+		value v;
+	};
+
+	item* items = nullptr;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 enum class token_type
 {
@@ -720,7 +740,7 @@ inline error reader::parse_literal(token_type& result)
 inline value_type value::type() const noexcept
 {
 	if (_type > value_type::array)
-		return (_offset & size_t_msbit) ? value_type::string : value_type::object;
+		return ((_offset & 3u) == 3u) ? value_type::string : value_type::object;
 
 	return _type;
 }
@@ -728,7 +748,7 @@ inline value_type value::type() const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline const char* value::get_c_str(const char* defaultValue) const noexcept
 {
-	return is_string() ? (_doc->_stringBuffer.data() + (_offset & ~size_t_msbit)) : defaultValue;
+	return is_string() ? (_doc->_stringBuffer.data() + (_offset >> 2u)) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
