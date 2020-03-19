@@ -4,7 +4,6 @@
 ## Example
 ```cpp
 #include <json5/json5.hpp>
-#include <json5/json5_reflect.hpp>
 
 struct Settings
 {
@@ -69,6 +68,9 @@ if (auto err = json5::from_stream(myInputStream, doc))
 ### `json5::builder`
 **TBD**
 
+### Traversal
+**`json5::document`** pattern
+
 ### Error reporting
 
 Library does not rely on exceptions. Instead, most parsing functions return `json5::error` structure containing error type and location. The simplest, most convenient way to check for parsing error is to do a check within `if` condition:
@@ -83,11 +85,11 @@ if (auto err = json5::from_file("settings.json", s))
 ### Library data types
 **TBD**
 
-### `json5::value`
+### `json5::box_value`
 
-### `json5::object`
+### `json5::object_view`
 
-### `json5::array`
+### `json5::array_view`
 
 ## Reflection API
 
@@ -105,6 +107,14 @@ if (auto err = json5::from_file("settings.json", s))
 ```cpp
 // Let's have a 3D vector struct:
 struct vec3 { float x, y, z; };
+
+// Let's have a triangle struct with 'vec3' members
+struct Triangle
+{
+	vec3 a, b, c;
+
+	JSON5_REFLECT(a, b, c)
+};
 
 namespace json5::detail {
 
@@ -143,3 +153,5 @@ inline error read(const json5::value& in, vec3& out)
 
 } // namespace json5::detail
 ```
+
+## More examples

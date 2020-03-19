@@ -29,6 +29,54 @@ bool PrintError(const json5::error& err)
 	return false;
 }
 
+// Let's have a 3D vector struct:
+struct vec3 { float x, y, z; };
+
+namespace json5::detail {
+
+// Write vec3 as JSON array of 3 numbers
+inline json5::box_value write(builder& b, const vec3& in)
+{
+	b.push_array();
+	b += write(b, in.x);
+	b += write(b, in.y);
+	b += write(b, in.z);
+	return b.pop();
+}
+
+// Read vec3 from JSON array
+inline error read(const json5::box_value& in, vec3& out)
+{
+	if (!in.is_array())
+		return { error::array_expected };
+
+	auto arr = json5::array_view(in);
+
+	if (arr.size() != 3)
+		return { error::wrong_array_size };
+
+	if (auto err = read(arr[0], out.x))
+		return err;
+
+	if (auto err = read(arr[1], out.y))
+		return err;
+
+	if (auto err = read(arr[2], out.z))
+		return err;
+
+	return { error::none };
+}
+
+} // namespace json5::detail
+
+
+// Let's have a triangle struct with 'vec3' members
+struct Triangle
+{
+	vec3 a, b, c;
+	JSON5_REFLECT(a, b, c)
+};
+
 //---------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
