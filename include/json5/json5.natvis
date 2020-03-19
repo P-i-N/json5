@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="json5::box_value">
+		<DisplayString Condition="_data==json5::box_value::box_null">null</DisplayString>
+		<DisplayString Condition="_data==json5::box_value::box_true">true</DisplayString>
+		<DisplayString Condition="_data==json5::box_value::box_false">false</DisplayString>
+		<DisplayString Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_string">
+			{ (const char*)(_data&amp;json5::box_value::box_payload), s }
+		</DisplayString>
+		<DisplayString Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_object">
+			object {{ size={ (size_t)((*(json5::box_value*)(_data&amp;json5::box_value::box_payload))._double)/2 } }}
+		</DisplayString>
+		<DisplayString Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_array">
+			array {{ size={ (size_t)((*(json5::box_value*)(_data&amp;json5::box_value::box_payload))._double) } }}
+		</DisplayString>
+		<DisplayString>{ _double }</DisplayString>
+		<Expand>
+			<Item Name="[size]" Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_object">
+				(size_t)((*(json5::box_value*)(_data&amp;json5::box_value::box_payload))._double)/2
+			</Item>
+			<Item Name="[size]" Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_array">
+				(size_t)((*(json5::box_value*)(_data&amp;json5::box_value::box_payload))._double)
+			</Item>
+			<ArrayItems Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_object">
+				<Size>(size_t)((*(json5::box_value*)(_data&amp;json5::box_value::box_payload))._double)</Size>
+				<ValuePointer>(json5::box_value*)(_data&amp;json5::box_value::box_payload)+1</ValuePointer>
+			</ArrayItems>
+			<ArrayItems Condition="(_data&amp;json5::box_value::box_mask)==json5::box_value::box_array">
+				<Size>(size_t)((*(json5::box_value*)(_data&amp;json5::box_value::box_payload))._double)</Size>
+				<ValuePointer>(json5::box_value*)(_data&amp;json5::box_value::box_payload)+1</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+	<Type Name="json5::document">
+		<DisplayString>{ _values[0] }</DisplayString>
+		<Expand>
+			<Item Name="[root]">_values[0]</Item>
+		</Expand>
+	</Type>
+</AutoVisualizer>

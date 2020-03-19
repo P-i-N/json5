@@ -1,4 +1,6 @@
 {
+  name: "",
+  age: 0,
   x: 123,
   y: 456,
   z: true,
@@ -11,15 +13,15 @@
     5
   ],
   barMap: {
-    "x": {
+    x: {
       name: "a",
       age: 1
     },
-    "y": {
+    y: {
       name: "b",
       age: 2
     },
-    "z": {
+    z: {
       name: "c",
       age: 3
     }
@@ -28,5 +30,9 @@
     10,
     20,
     30
-  ]
+  ],
+  bar: {
+    name: "Somebody Unknown",
+    age: 500
+  }
 }

@@ -37,6 +37,6 @@ workspace "json5"
 project "test"
 	language "C++"
 	kind "ConsoleApp"
-	files { "test/**.cpp", "test/**.hpp", "include/**.hpp" }
+	files { "test/**.cpp", "test/**.hpp", "include/**.hpp", "include/**.inl", "**.natvis" }
 	includedirs { "include" }
 	debugdir "test"

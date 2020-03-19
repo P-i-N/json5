@@ -1,0 +1,452 @@
+#pragma once
+
+#include "json5.hpp"
+
+namespace json5::detail {
+
+enum class token_type
+{
+	unknown, identifier, string, number, colon, comma,
+	object_begin, object_end, array_begin, array_end,
+	literal_true, literal_false, literal_null
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class reader final : builder
+{
+public:
+	reader(document& doc, std::istream& is) : builder(doc), _is(is) { }
+
+	char next();
+	char peek() { return _is.peek(); }
+	bool eof() const { return _is.eof(); }
+	error make_error(int type) const noexcept { return error{ type, _line, _column }; }
+
+	error parse();
+	error parse_value(box_value& result);
+	error parse_object();
+	error parse_array();
+	error peek_next_token(token_type& result);
+	error parse_number(double& result);
+	error parse_string(detail::string_offset& result);
+	error parse_identifier(detail::string_offset& result);
+	error parse_literal(token_type& result);
+
+private:
+	std::istream& _is;
+	int _line = 1;
+	int _column = 1;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------------------------------------------------
+inline char reader::next()
+{
+	if (_is.peek() == '\n')
+	{
+		_column = 0;
+		++_line;
+	}
+
+	++_column;
+	return _is.get();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse()
+{
+	reset();
+
+	if (auto err = parse_value(root()))
+		return err;
+
+	if (!root().is_array() && !root().is_object())
+		return make_error(error::invalid_root);
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_value(box_value& result)
+{
+	token_type tt = token_type::unknown;
+	if (auto err = peek_next_token(tt))
+		return err;
+
+	switch (tt)
+	{
+	case token_type::number:
+	{
+		if (double number = 0.0; auto err = parse_number(number))
+			return err;
+		else
+			result = box_value(number);
+	}
+	break;
+
+	case token_type::string:
+	{
+		if (detail::string_offset offset = 0; auto err = parse_string(offset))
+			return err;
+		else
+			result = new_string(offset);
+	}
+	break;
+
+	case token_type::identifier:
+	{
+		if (token_type lit = token_type::unknown; auto err = parse_literal(lit))
+			return err;
+		else
+		{
+			if (lit == token_type::literal_true)
+				result = box_value(true);
+			else if (lit == token_type::literal_false)
+				result = box_value(false);
+			else if (lit == token_type::literal_null)
+				result = box_value();
+			else
+				return make_error(error::invalid_literal);
+		}
+	}
+	break;
+
+	case token_type::object_begin:
+	{
+		push_object();
+		{
+			if (auto err = parse_object())
+				return err;
+		}
+		result = pop();
+	}
+	break;
+
+	case token_type::array_begin:
+	{
+		push_array();
+		{
+			if (auto err = parse_array())
+				return err;
+		}
+		result = pop();
+	}
+	break;
+
+	default:
+		return make_error(error::syntax_error);
+	}
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_object()
+{
+	next(); // Consume '{'
+
+	bool expectComma = false;
+	while (!eof())
+	{
+		token_type tt = token_type::unknown;
+		if (auto err = peek_next_token(tt))
+			return err;
+
+		detail::string_offset keyOffset;
+
+		switch (tt)
+		{
+		case token_type::identifier:
+		case token_type::string:
+		{
+			if (expectComma)
+				return make_error(error::comma_expected);
+
+			if (auto err = parse_identifier(keyOffset))
+				return err;
+		}
+		break;
+
+		case token_type::object_end:
+			next(); // Consume '}'
+			return { error::none };
+
+		case token_type::comma:
+			if (!expectComma)
+				return make_error(error::syntax_error);
+
+			next(); // Consume ','
+			expectComma = false;
+			continue;
+
+		default:
+			return expectComma ? make_error(error::comma_expected) : make_error(error::syntax_error);
+		}
+
+		if (auto err = peek_next_token(tt))
+			return err;
+
+		if (tt != token_type::colon)
+			return make_error(error::colon_expected);
+
+		next(); // Consume ':'
+
+		box_value newValue;
+		if (auto err = parse_value(newValue))
+			return err;
+
+		(*this)[keyOffset] = newValue;
+		expectComma = true;
+	}
+
+	return make_error(error::unexpected_end);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_array()
+{
+	next(); // Consume '['
+
+	bool expectComma = false;
+	while (!eof())
+	{
+		token_type tt = token_type::unknown;
+		if (auto err = peek_next_token(tt))
+			return err;
+
+		if (tt == token_type::array_end && next()) // Consume ']'
+			return { error::none };
+		else if (expectComma)
+		{
+			expectComma = false;
+
+			if (tt != token_type::comma)
+				return make_error(error::comma_expected);
+
+			next(); // Consume ','
+			continue;
+		}
+
+		box_value newValue;
+		if (auto err = parse_value(newValue))
+			return err;
+
+		(*this) += newValue;
+		expectComma = true;
+	}
+
+	return make_error(error::unexpected_end);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::peek_next_token(token_type& result)
+{
+	enum class comment_type { none, line, block } parsingComment = comment_type::none;
+
+	while (!eof())
+	{
+		char ch = peek();
+		if (ch == '\n')
+		{
+			if (parsingComment == comment_type::line)
+				parsingComment = comment_type::none;
+		}
+		else if (parsingComment != comment_type::none || ch <= 32)
+		{
+			if (parsingComment == comment_type::block && ch == '*' && next()) // Consume '*'
+			{
+				if (peek() == '/')
+					parsingComment = comment_type::none;
+			}
+		}
+		else if (ch == '/' && next()) // Consume '/'
+		{
+			if (peek() == '/')
+				parsingComment = comment_type::line;
+			else if (peek() == '*')
+				parsingComment = comment_type::block;
+			else
+				return make_error(error::syntax_error);
+		}
+		else if (strchr("{}[]:,", ch))
+		{
+			if (ch == '{')
+				result = token_type::object_begin;
+			else if (ch == '}')
+				result = token_type::object_end;
+			else if (ch == '[')
+				result = token_type::array_begin;
+			else if (ch == ']')
+				result = token_type::array_end;
+			else if (ch == ':')
+				result = token_type::colon;
+			else if (ch == ',')
+				result = token_type::comma;
+
+			return { error::none };
+		}
+		else if (isalpha(ch) || ch == '_')
+		{
+			result = token_type::identifier;
+			return { error::none };
+		}
+		else if (isdigit(ch) || ch == '.' || ch == '+' || ch == '-')
+		{
+			if (ch == '+') next(); // Consume leading '+'
+
+			result = token_type::number;
+			return { error::none };
+		}
+		else if (ch == '"' || ch == '\'')
+		{
+			result = token_type::string;
+			return { error::none };
+		}
+		else
+			return make_error(error::syntax_error);
+
+		next();
+	}
+
+	return make_error(error::unexpected_end);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_number(double& result)
+{
+	char buff[256] = { };
+	size_t length = 0;
+
+	while (!eof() && length < sizeof(buff))
+	{
+		buff[length++] = next();
+
+		char ch = peek();
+		if (ch <= 32 || ch == ',' || ch == '}' || ch == ']')
+			break;
+	}
+
+	auto convResult = std::from_chars(buff, buff + length, result);
+
+	if (convResult.ec != std::errc())
+		return make_error(error::syntax_error);
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_string(detail::string_offset& result)
+{
+	bool singleQuoted = peek() == '\'';
+	next(); // Consume '\'' or '"'
+
+	result = string_buffer_offset();
+
+	while (!eof())
+	{
+		char ch = peek();
+		if (((singleQuoted && ch == '\'') || (!singleQuoted && ch == '"')) && next()) // Consume '\'' or '"'
+			break;
+		else if (ch == '\\' && next()) // Consume '\\'
+		{
+			ch = peek();
+			if (ch == '\n')
+				next();
+			else if (ch == 't' && next())
+				string_buffer_add('\t');
+			else if (ch == 'n' && next())
+				string_buffer_add('\n');
+			else if (ch == 'r' && next())
+				string_buffer_add('\r');
+			else if (ch == '\\' && next())
+				string_buffer_add('\\');
+			else if (ch == '\'' && next())
+				string_buffer_add('\'');
+			else if (ch == '"' && next())
+				string_buffer_add('"');
+			else if (ch == '\\' && next())
+				string_buffer_add('\\');
+			else
+				return make_error(error::invalid_escape_seq);
+		}
+		else
+			string_buffer_add(next());
+	}
+
+	if (eof())
+		return make_error(error::unexpected_end);
+
+	string_buffer_add(0);
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_identifier(detail::string_offset& result)
+{
+	result = string_buffer_offset();
+
+	char firstCh = peek();
+	bool isString = (firstCh == '\'') || (firstCh == '"');
+
+	if (isString && next()) // Consume '\'' or '"'
+	{
+		char ch = peek();
+		if (!isalpha(ch) && ch != '_')
+			return make_error(error::syntax_error);
+	}
+
+	while (!eof())
+	{
+		string_buffer_add(next());
+
+		char ch = peek();
+		if (!isalpha(ch) && !isdigit(ch) && ch != '_')
+			break;
+	}
+
+	if (isString && firstCh != next()) // Consume '\'' or '"'
+		return make_error(error::syntax_error);
+
+	string_buffer_add(0);
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error reader::parse_literal(token_type& result)
+{
+	char ch = peek();
+
+	// "true"
+	if (ch == 't')
+	{
+		if (next() && next() == 'r' && next() == 'u' && next() == 'e')
+		{
+			result = token_type::literal_true;
+			return { error::none };
+		}
+	}
+	// "false"
+	else if (ch == 'f')
+	{
+		if (next() && next() == 'a' && next() == 'l' && next() == 's' && next() == 'e')
+		{
+			result = token_type::literal_false;
+			return { error::none };
+		}
+	}
+	// "null"
+	else if (ch == 'n')
+	{
+		if (next() && next() == 'u' && next() == 'l' && next() == 'l')
+		{
+			result = token_type::literal_null;
+			return { error::none };
+		}
+	}
+
+	return make_error(error::invalid_literal);
+}
+
+} // namespace json5::detail

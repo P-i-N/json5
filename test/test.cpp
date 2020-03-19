@@ -1,5 +1,4 @@
 #include <json5/json5.hpp>
-#include <json5/json5_reflect.hpp>
 
 #include <chrono>
 #include <iostream>
@@ -19,12 +18,6 @@ struct Stopwatch
 };
 
 //---------------------------------------------------------------------------------------------------------------------
-void PrintJSONValue(const json5::value& value)
-{
-	json5::to_stream(std::cout, value);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 bool PrintError(const json5::error& err)
 {
 	if (err)
@@ -39,6 +32,18 @@ bool PrintError(const json5::error& err)
 //---------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
+	/// Visitor test
+	if (false)
+	{
+		json5::document doc;
+
+		{
+			Stopwatch sw{ "Load twitter.json" };
+			if (auto err = json5::from_file("twitter.json", doc))
+				json5::to_stream(std::cout, err);
+		}
+	}
+
 	/// Build
 	{
 		json5::document doc;
@@ -49,7 +54,14 @@ int main(int argc, char* argv[])
 			b["x"] = b.new_string("Hello!");
 			b["y"] = 123.0;
 			b["z"] = true;
-			b["n"] = nullptr;
+
+			b.push_array();
+			{
+				b += b.new_string("a");
+				b += b.new_string("b");
+				b += b.new_string("c");
+			}
+			b["arr"] = b.pop();
 		}
 		b.pop();
 
@@ -60,7 +72,7 @@ int main(int argc, char* argv[])
 	{
 		json5::document doc;
 		PrintError(json5::from_file("short_example.json5", doc));
-		PrintJSONValue(doc.root());
+		json5::to_stream(std::cout, doc);
 	}
 
 	/// File load/save test
@@ -68,7 +80,7 @@ int main(int argc, char* argv[])
 		json5::document doc1;
 		json5::document doc2;
 		{
-			Stopwatch sw{ "Load twitter.json" };
+			Stopwatch sw{ "Load twitter.json (doc1)" };
 			PrintError(json5::from_file("twitter.json", doc1));
 		}
 
@@ -78,14 +90,17 @@ int main(int argc, char* argv[])
 		}
 
 		{
-			Stopwatch sw{ "Reload twitter.json5" };
+			Stopwatch sw{ "Reload twitter.json5 (doc2)" };
 			json5::from_file("twitter.json5", doc2);
 		}
 
-		if (doc1 == doc2)
-			std::cout << "doc1 == doc2" << std::endl;
-		else
-			std::cout << "doc1 != doc2" << std::endl;
+		{
+			Stopwatch sw{ "Compare doc1 == doc2" };
+			if (doc1 == doc2)
+				std::cout << "doc1 == doc2" << std::endl;
+			else
+				std::cout << "doc1 != doc2" << std::endl;
+		}
 	}
 
 	/// Equality test
@@ -106,7 +121,7 @@ int main(int argc, char* argv[])
 	{
 		json5::document doc;
 		PrintError(json5::from_string("{ text: 'Hello\\\n, world!' }", doc));
-		PrintJSONValue(doc.root());
+		json5::to_stream(std::cout, doc);
 	}
 
 	/// Reflection test
@@ -131,7 +146,9 @@ int main(int argc, char* argv[])
 
 			std::array<float, 3> position = { 10.0f, 20.0f, 30.0f };
 
-			JSON5_REFLECT(x, y, z, text, numbers, barMap, position)
+			Bar bar = { "Somebody Unknown", 500 };
+
+			JSON5_REFLECT(x, y, z, text, numbers, barMap, position, bar)
 			bool operator==(const Foo& o) const noexcept { return make_tuple() == o.make_tuple(); }
 		};
 
