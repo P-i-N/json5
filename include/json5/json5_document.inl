@@ -64,7 +64,7 @@ std::vector<box_value> document::operator()(std::string_view pattern) const noex
 {
 	std::vector<box_value> result;
 	detail::visit(root(), pattern, [&result](box_value v) { result.push_back(v); });
-	return std::move(result);
+	return result;
 }
 
 } // namepsace json5
