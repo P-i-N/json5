@@ -7,11 +7,11 @@
 namespace json5::detail {
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void visit( const box_value &in, std::string_view pattern, std::function<void( box_value )> cb )
+inline void filter( const value &in, std::string_view pattern, values_t &out )
 {
 	if ( pattern.empty() )
 	{
-		cb( in );
+		out.push_back( in );
 		return;
 	}
 
@@ -31,29 +31,29 @@ inline void visit( const box_value &in, std::string_view pattern, std::function<
 		if ( in.is_object() )
 		{
 			for ( auto kvp : object_view( in ) )
-				visit( kvp.second, tail, cb );
+				filter( kvp.second, tail, out );
 		}
 		else if ( in.is_array() )
 		{
 			for ( auto v : array_view( in ) )
-				visit( v, tail, cb );
+				filter( v, tail, out );
 		}
 		else
-			visit( in, std::string_view(), cb );
+			filter( in, std::string_view(), out );
 	}
 	else if ( head == "**" )
 	{
 		if ( in.is_object() )
 		{
-			visit( in, tail, cb );
+			filter( in, tail, out );
 
 			for ( auto kvp : object_view( in ) )
-				visit( kvp.second, pattern, cb );
+				filter( kvp.second, pattern, out );
 		}
 		else if ( in.is_array() )
 		{
 			for ( auto v : array_view( in ) )
-				visit( v, pattern, cb );
+				filter( v, pattern, out );
 		}
 	}
 	else
@@ -63,7 +63,7 @@ inline void visit( const box_value &in, std::string_view pattern, std::function<
 			for ( auto kvp : object_view( in ) )
 			{
 				if ( head == kvp.first )
-					visit( kvp.second, tail, cb );
+					filter( kvp.second, tail, out );
 			}
 		}
 	}

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <algorithm>
-#include <charconv>
 #include <cstdint>
 #include <fstream>
 #include <istream>
@@ -22,17 +20,21 @@ using string_offset = unsigned;
 
 namespace json5 {
 
+class value;
+
 enum class value_type : size_t { null = 0, boolean, number, array, string, object };
 
-class box_value final
+using values_t = std::vector<value>;
+
+class value final
 {
 public:
-	box_value() noexcept = default;
-	box_value( std::nullptr_t ) noexcept : _data( box_null ) { }
-	box_value( bool val ) noexcept : _data( val ? box_true : box_false ) { }
-	box_value( int val ) noexcept : _double( static_cast<double>( val ) ) { }
-	box_value( float val ) noexcept : _double( static_cast<double>( val ) ) { }
-	box_value( double val ) noexcept : _double( val ) { }
+	value() noexcept = default;
+	value( std::nullptr_t ) noexcept : _data( box_null ) { }
+	value( bool val ) noexcept : _data( val ? box_true : box_false ) { }
+	value( int val ) noexcept : _double( static_cast<double>( val ) ) { }
+	value( float val ) noexcept : _double( static_cast<double>( val ) ) { }
+	value( double val ) noexcept : _double( val ) { }
 
 	value_type type() const noexcept;
 
@@ -53,16 +55,17 @@ public:
 	double get_double( double val = 0.0 ) const noexcept { return is_number() ? _double : val; }
 	const char *get_c_str( const char *val = "" ) const noexcept;
 
-	bool operator==( const box_value &other ) const noexcept;
-	bool operator!=( const box_value &other ) const noexcept { return !( ( *this ) == other ); }
+	bool operator==( const value &other ) const noexcept;
+	bool operator!=( const value &other ) const noexcept { return !( ( *this ) == other ); }
 
-	uint64_t payload() const noexcept { return _data & box_payload; }
+	values_t operator()( std::string_view pattern ) const noexcept;
+
+	template <typename T>
+	T payload() const noexcept { return ( T )( _data & box_payload ); }
 
 private:
-	using values_t = std::vector<box_value>;
-
-	box_value( value_type t, uint64_t data );
-	box_value( value_type t, const void *data ) : box_value( t, reinterpret_cast<uint64_t>( data ) ) { }
+	value( value_type t, uint64_t data );
+	value( value_type t, const void *data ) : value( t, reinterpret_cast<uint64_t>( data ) ) { }
 
 	void relink( const class document *prevDoc, const class document &doc ) noexcept;
 
@@ -124,7 +127,7 @@ struct error final
 } // namespace json5
 
 #include "json5_views.inl"
-#include "json5_visitor.inl"
+#include "json5_filter.inl"
 #include "json5_document.inl"
 #include "json5_builder.inl"
 #include "json5_reader.inl"
@@ -132,7 +135,7 @@ struct error final
 namespace json5 {
 
 //---------------------------------------------------------------------------------------------------------------------
-box_value::box_value( value_type t, uint64_t data )
+value::value( value_type t, uint64_t data )
 {
 	if ( t == value_type::object )
 		_data = box_object | data;
@@ -145,7 +148,7 @@ box_value::box_value( value_type t, uint64_t data )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value_type box_value::type() const noexcept
+inline value_type value::type() const noexcept
 {
 	if ( ( _data & box_nanbits ) != box_nanbits )
 		return value_type::number;
@@ -163,7 +166,7 @@ inline value_type box_value::type() const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool box_value::get_bool( bool val ) const noexcept
+inline bool value::get_bool( bool val ) const noexcept
 {
 	if ( _data == box_true )
 		return true;
@@ -174,13 +177,13 @@ inline bool box_value::get_bool( bool val ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline const char *box_value::get_c_str( const char *defaultValue ) const noexcept
+inline const char *value::get_c_str( const char *defaultValue ) const noexcept
 {
 	return is_string() ? reinterpret_cast<const char *>( _data & box_payload ) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool box_value::operator==( const box_value &other ) const noexcept
+inline bool value::operator==( const value &other ) const noexcept
 {
 	if ( auto t = type(); t == other.type() )
 	{
@@ -204,21 +207,29 @@ inline bool box_value::operator==( const box_value &other ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void box_value::relink( const class document *prevDoc, const class document &doc ) noexcept
+inline values_t value::operator()( std::string_view pattern ) const noexcept
+{
+	values_t result;
+	detail::filter( *this, pattern, result );
+	return result;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void value::relink( const class document *prevDoc, const class document &doc ) noexcept
 {
 	if ( is_string() )
 	{
 		if ( prevDoc )
-			payload( reinterpret_cast<const char *>( payload() ) - prevDoc->_strings.data() );
+			payload( payload<const char *>() - prevDoc->_strings.data() );
 
-		payload( doc._strings.data() + payload() );
+		payload( doc._strings.data() + payload<uint64_t>() );
 	}
 	else if ( is_object() || is_array() )
 	{
 		if ( prevDoc )
-			payload( reinterpret_cast<const box_value *>( payload() ) - prevDoc->_values.data() );
+			payload( payload<const value *>() - prevDoc->_values.data() );
 
-		payload( doc._values.data() + payload() );
+		payload( doc._values.data() + payload<uint64_t>() );
 	}
 }
 
@@ -278,7 +289,7 @@ inline void to_stream( std::ostream &os, const char *str )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const box_value &v, const output_style &style = output_style(), int depth = 0 )
+inline void to_stream( std::ostream &os, const value &v, const output_style &style = output_style(), int depth = 0 )
 {
 	if ( v.is_null() )
 		os << "null";

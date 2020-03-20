@@ -17,20 +17,18 @@ public:
 	bool operator==( const document &other ) const noexcept { return root() == other.root(); }
 	bool operator!=( const document &other ) const noexcept { return !( ( *this ) == other ); }
 
-	const box_value &root() const noexcept { return _values[0]; }
+	const value &root() const noexcept { return _values[0]; }
 
-	using values_t = std::vector<box_value>;
-
-	values_t operator()( std::string_view pattern ) const noexcept;
+	values_t operator()( std::string_view pattern ) const noexcept { return root()( pattern ); }
 
 private:
 	void assign_copy( const document &copy );
 	void assign_rvalue( document &&rValue ) noexcept;
 
 	std::string _strings;
-	values_t _values = { box_value() };
+	std::vector<value> _values = { value() };
 
-	friend box_value;
+	friend value;
 	friend class builder;
 };
 
@@ -57,14 +55,6 @@ void document::assign_rvalue( document &&rValue ) noexcept
 
 	for ( auto &v : rValue._values )
 		v.relink( this, rValue );
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-std::vector<box_value> document::operator()( std::string_view pattern ) const noexcept
-{
-	std::vector<box_value> result;
-	detail::visit( root(), pattern, [&result]( box_value v ) { result.push_back( v ); } );
-	return result;
 }
 
 } // namepsace json5

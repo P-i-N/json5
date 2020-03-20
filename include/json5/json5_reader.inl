@@ -2,6 +2,8 @@
 
 #include "json5.hpp"
 
+#include <charconv>
+
 namespace json5::detail {
 
 enum class token_type
@@ -24,7 +26,7 @@ public:
 	error make_error( int type ) const noexcept { return error{ type, _line, _column }; }
 
 	error parse();
-	error parse_value( box_value &result );
+	error parse_value( value &result );
 	error parse_object();
 	error parse_array();
 	error peek_next_token( token_type &result );
@@ -69,7 +71,7 @@ inline error reader::parse()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_value( box_value &result )
+inline error reader::parse_value( value &result )
 {
 	token_type tt = token_type::unknown;
 	if ( auto err = peek_next_token( tt ) )
@@ -82,7 +84,7 @@ inline error reader::parse_value( box_value &result )
 			if ( double number = 0.0; auto err = parse_number( number ) )
 				return err;
 			else
-				result = box_value( number );
+				result = value( number );
 		}
 		break;
 
@@ -102,11 +104,11 @@ inline error reader::parse_value( box_value &result )
 			else
 			{
 				if ( lit == token_type::literal_true )
-					result = box_value( true );
+					result = value( true );
 				else if ( lit == token_type::literal_false )
-					result = box_value( false );
+					result = value( false );
 				else if ( lit == token_type::literal_null )
-					result = box_value();
+					result = value();
 				else
 					return make_error( error::invalid_literal );
 			}
@@ -193,7 +195,7 @@ inline error reader::parse_object()
 
 		next(); // Consume ':'
 
-		box_value newValue;
+		value newValue;
 		if ( auto err = parse_value( newValue ) )
 			return err;
 
@@ -229,7 +231,7 @@ inline error reader::parse_array()
 			continue;
 		}
 
-		box_value newValue;
+		value newValue;
 		if ( auto err = parse_value( newValue ) )
 			return err;
 

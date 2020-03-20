@@ -2,28 +2,30 @@
 
 #include "json5.hpp"
 
+#include <algorithm>
+
 namespace json5 {
 
 class object_view final
 {
 public:
-	object_view( const box_value &v )
-		: _pair( v.is_object() ? ( reinterpret_cast<const box_value *>( v.payload() ) + 1 ) : nullptr )
+	object_view( const value &v )
+		: _pair( v.is_object() ? ( v.payload<const value *>() + 1 ) : nullptr )
 		, _count( _pair ? ( _pair[-1].get_size_t() / 2 ) : 0 )
 	{ }
 
-	using key_value_pair = std::pair<const char *, box_value>;
+	using key_value_pair = std::pair<const char *, value>;
 
 	class iterator final
 	{
 	public:
-		iterator( const box_value *p = nullptr ) : _pair( p ) { }
+		iterator( const value *p = nullptr ) : _pair( p ) { }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
 		iterator &operator++() { _pair += 2; return *this; }
 		key_value_pair operator*() const { return key_value_pair( _pair[0].get_c_str(), _pair[1] ); }
 
 	private:
-		const box_value *_pair = nullptr;
+		const value *_pair = nullptr;
 	};
 
 	iterator begin() const noexcept { return iterator( _pair ); }
@@ -36,7 +38,7 @@ public:
 	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
 
 private:
-	const box_value *_pair = nullptr;
+	const value *_pair = nullptr;
 	size_t _count = 0;
 };
 
@@ -45,24 +47,24 @@ private:
 class array_view final
 {
 public:
-	array_view( const box_value &v )
-		: _value( v.is_array() ? ( reinterpret_cast<const box_value *>( v.payload() ) + 1 ) : nullptr )
+	array_view( const value &v )
+		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
 		, _count( _value ? _value[-1].get_size_t() : 0 )
 	{ }
 
-	using iterator = const box_value*;
+	using iterator = const value*;
 
 	iterator begin() const noexcept { return _value; }
 	iterator end() const noexcept { return _value + _count; }
 	size_t size() const noexcept { return _count; }
 	bool empty() const noexcept { return _count == 0; }
-	const box_value &operator[]( size_t index ) const noexcept { return _value[index]; }
+	const value &operator[]( size_t index ) const noexcept { return _value[index]; }
 
 	bool operator==( const array_view &other ) const noexcept;
 	bool operator!=( const array_view &other ) const noexcept { return !( ( *this ) == other ); }
 
 private:
-	const box_value *_value = nullptr;
+	const value *_value = nullptr;
 	size_t _count = 0;
 };
 

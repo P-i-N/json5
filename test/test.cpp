@@ -32,10 +32,17 @@ bool PrintError( const json5::error &err )
 // Let's have a 3D vector struct:
 struct vec3 { float x, y, z; };
 
+// Let's have a triangle struct with 'vec3' members
+struct Triangle
+{
+	vec3 a, b, c;
+	JSON5_REFLECT( a, b, c )
+};
+
 namespace json5::detail {
 
 // Write vec3 as JSON array of 3 numbers
-inline json5::box_value write( builder &b, const vec3 &in )
+inline json5::value write( builder &b, const vec3 &in )
 {
 	b.push_array();
 	b += write( b, in.x );
@@ -45,7 +52,7 @@ inline json5::box_value write( builder &b, const vec3 &in )
 }
 
 // Read vec3 from JSON array
-inline error read( const json5::box_value &in, vec3 &out )
+inline error read( const json5::value &in, vec3 &out )
 {
 	if ( !in.is_array() )
 		return { error::array_expected };
@@ -68,14 +75,6 @@ inline error read( const json5::box_value &in, vec3 &out )
 }
 
 } // namespace json5::detail
-
-
-// Let's have a triangle struct with 'vec3' members
-struct Triangle
-{
-	vec3 a, b, c;
-	JSON5_REFLECT( a, b, c )
-};
 
 //---------------------------------------------------------------------------------------------------------------------
 int main( int argc, char *argv[] )
@@ -200,8 +199,11 @@ int main( int argc, char *argv[] )
 			bool operator==( const Foo &o ) const noexcept { return make_tuple() == o.make_tuple(); }
 		};
 
+		json5::output_style style;
+		style.ignore_defaults = true;
+
 		Foo foo1;
-		json5::to_file( "Foo.json5", foo1 );
+		json5::to_file( "Foo.json5", foo1, style );
 
 		Foo foo2;
 		json5::from_file( "Foo.json5", foo2 );
