@@ -112,7 +112,8 @@ struct error final
 		string_expected,
 		object_expected,
 		array_expected,
-		wrong_array_size
+		wrong_array_size,
+		invalid_enum,
 	};
 
 	int type = none;
@@ -238,7 +239,8 @@ inline void to_stream( std::ostream &os, const error &err )
 	{
 		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
 		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
-		"number expected", "string expected", "object expected", "array expected", "wrong array size"
+		"number expected", "string expected", "object expected", "array expected", "wrong array size",
+		"invalid enum"
 	};
 
 	os << errStrings[err.type] << " at " << err.line << ":" << err.column;
@@ -257,7 +259,6 @@ struct output_style
 {
 	const char *indentation = "  ";
 	bool json_compatible = false;
-	bool ignore_defaults = false;
 };
 
 //---------------------------------------------------------------------------------------------------------------------

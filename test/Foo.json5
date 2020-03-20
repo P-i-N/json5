@@ -32,5 +32,6 @@
   bar: {
     name: "Somebody Unknown",
     age: 500
-  }
+  },
+  e: "Second"
 }

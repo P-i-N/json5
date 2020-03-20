@@ -29,52 +29,15 @@ bool PrintError( const json5::error &err )
 	return false;
 }
 
-// Let's have a 3D vector struct:
-struct vec3 { float x, y, z; };
-
-// Let's have a triangle struct with 'vec3' members
-struct Triangle
+enum class MyEnum
 {
-	vec3 a, b, c;
-	JSON5_REFLECT( a, b, c )
+	Zero,
+	First,
+	Second,
+	Third
 };
 
-namespace json5::detail {
-
-// Write vec3 as JSON array of 3 numbers
-inline json5::value write( builder &b, const vec3 &in )
-{
-	b.push_array();
-	b += write( b, in.x );
-	b += write( b, in.y );
-	b += write( b, in.z );
-	return b.pop();
-}
-
-// Read vec3 from JSON array
-inline error read( const json5::value &in, vec3 &out )
-{
-	if ( !in.is_array() )
-		return { error::array_expected };
-
-	auto arr = json5::array_view( in );
-
-	if ( arr.size() != 3 )
-		return { error::wrong_array_size };
-
-	if ( auto err = read( arr[0], out.x ) )
-		return err;
-
-	if ( auto err = read( arr[1], out.y ) )
-		return err;
-
-	if ( auto err = read( arr[2], out.z ) )
-		return err;
-
-	return { error::none };
-}
-
-} // namespace json5::detail
+JSON5_ENUM( MyEnum, Zero, First, Second, Third )
 
 //---------------------------------------------------------------------------------------------------------------------
 int main( int argc, char *argv[] )
@@ -194,16 +157,14 @@ int main( int argc, char *argv[] )
 			std::array<float, 3> position = { 10.0f, 20.0f, 30.0f };
 
 			Bar bar = { "Somebody Unknown", 500 };
+			MyEnum e = MyEnum::Second;
 
-			JSON5_REFLECT( x, y, z, text, numbers, barMap, position, bar )
+			JSON5_REFLECT( x, y, z, text, numbers, barMap, position, bar, e )
 			bool operator==( const Foo &o ) const noexcept { return make_tuple() == o.make_tuple(); }
 		};
 
-		json5::output_style style;
-		style.ignore_defaults = true;
-
 		Foo foo1;
-		json5::to_file( "Foo.json5", foo1, style );
+		json5::to_file( "Foo.json5", foo1 );
 
 		Foo foo2;
 		json5::from_file( "Foo.json5", foo2 );

@@ -13,9 +13,19 @@
 	inline auto make_tuple() const noexcept { return std::tie(__VA_ARGS__); }
 #endif
 
+#if !defined(JSON5_ENUM)
+#define JSON5_ENUM(_Name, ...) \
+	template <> struct json5::detail::enum_table<_Name> : std::true_type { \
+		using enum _Name; \
+		static constexpr char* names = #__VA_ARGS__; \
+		static constexpr _Name values[] = { __VA_ARGS__ }; };
+#endif
+
 namespace json5 {
 
 namespace detail {
+
+template <typename T> struct enum_table : std::false_type { };
 
 //---------------------------------------------------------------------------------------------------------------------
 inline std::string_view get_name_slice( const char *names, size_t index )
@@ -87,16 +97,46 @@ template <typename K, typename T, typename H, typename EQ, typename A>
 inline json5::value write( builder &b, const std::unordered_map<K, T, H, EQ, A> &in ) { return write_map( b, in ); }
 
 //---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline json5::value write_enum( builder &b, T in )
+{
+	size_t index = 0;
+	const auto *names = enum_table<T>::names;
+	const auto *values = enum_table<T>::values;
+
+	while ( true )
+	{
+		auto name = get_name_slice( names, index );
+
+		// Underlying value fallback
+		if ( name.empty() )
+			return write( b, std::underlying_type_t<T>( in ) );
+
+		if ( in == values[index] )
+			return b.new_string( name );
+
+		++index;
+	}
+
+	return json5::value();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
 inline void write( builder &b, const std::tuple<Types...> &t )
 {
 	const auto &in = std::get<I>( t );
-	using Type = std::remove_reference_t<decltype( in )>;
+	using Type = std::remove_const_t<std::remove_reference_t<decltype( in )>>;
 
-	if ( auto name = detail::get_name_slice( std::get<0>( t ), I - 1 ); !name.empty() )
+	if ( auto name = get_name_slice( std::get<0>( t ), I - 1 ); !name.empty() )
 	{
 		if constexpr ( std::is_enum_v<Type> )
-			b[name] = write( b, std::underlying_type_t<Type>( in ) );
+		{
+			if constexpr ( enum_table<Type>() )
+				b[name] = write_enum( b, in );
+			else
+				b[name] = write( b, std::underlying_type_t<Type>( in ) );
+		}
 		else
 			b[name] = write( b, in );
 	}
@@ -252,12 +292,37 @@ inline error read( const json5::value &in, std::unordered_map<K, T, H, EQ, A> &o
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read( const json5::value &in, T &out )
+inline error read_enum( const json5::value &in, T &out )
 {
-	if ( !in.is_object() )
-		return { error::object_expected };
+	if ( !in.is_string() && !in.is_number() )
+		return { error::string_expected };
 
-	return read( json5::object_view( in ), out.make_named_tuple() );
+	size_t index = 0;
+	const auto *names = enum_table<T>::names;
+	const auto *values = enum_table<T>::values;
+
+	while ( true )
+	{
+		auto name = get_name_slice( names, index );
+
+		if ( name.empty() )
+			break;
+
+		if ( in.is_string() && name == in.get_c_str() )
+		{
+			out = values[index];
+			return { error::none };
+		}
+		else if ( in.is_number() && in.get_int() == static_cast<int>( values[index] ) )
+		{
+			out = values[index];
+			return { error::none };
+		}
+
+		++index;
+	}
+
+	return { error::invalid_enum };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -272,8 +337,27 @@ inline error read( const json5::object_view &obj, std::tuple<Types...> &t )
 	auto iter = obj.find( name );
 	if ( iter != obj.end() )
 	{
-		if ( auto err = read( ( *iter ).second, out ) )
-			return err;
+		if constexpr ( std::is_enum_v<Type> )
+		{
+			if constexpr ( enum_table<Type>() )
+			{
+				if ( auto err = read_enum( ( *iter ).second, out ) )
+					return err;
+			}
+			else
+			{
+				std::underlying_type_t<Type> temp;
+				if ( auto err = read( ( *iter ).second, temp ) )
+					return err;
+
+				out = static_cast<Type>( temp );
+			}
+		}
+		else
+		{
+			if ( auto err = read( ( *iter ).second, out ) )
+				return err;
+		}
 	}
 
 	if constexpr ( I + 1 != sizeof...( Types ) )
@@ -283,6 +367,16 @@ inline error read( const json5::object_view &obj, std::tuple<Types...> &t )
 	}
 
 	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline error read( const json5::value &in, T &out )
+{
+	if ( !in.is_object() )
+		return { error::object_expected };
+
+	return read( json5::object_view( in ), out.make_named_tuple() );
 }
 
 } // namespace detail
