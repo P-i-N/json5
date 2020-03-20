@@ -11,7 +11,7 @@ class object_view final
 public:
 	object_view( const value &v )
 		: _pair( v.is_object() ? ( v.payload<const value *>() + 1 ) : nullptr )
-		, _count( _pair ? ( _pair[-1].get_size_t() / 2 ) : 0 )
+		, _count( _pair ? ( _pair[-1].get<size_t>() / 2 ) : 0 )
 	{ }
 
 	using key_value_pair = std::pair<const char *, value>;
@@ -49,7 +49,7 @@ class array_view final
 public:
 	array_view( const value &v )
 		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
-		, _count( _value ? _value[-1].get_size_t() : 0 )
+		, _count( _value ? _value[-1].get<size_t>() : 0 )
 	{ }
 
 	using iterator = const value*;

@@ -149,34 +149,16 @@ inline error read( const json5::value &in, bool &out )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, int &out )
+template <typename T>
+inline error read_number( const json5::value &in, T &out )
 {
-	if ( !in.is_number() )
-		return { error::number_expected };
-
-	out = in.get_int();
-	return { error::none };
+	return in.try_get( out ) ? error() : error{ error::number_expected };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, float &out )
-{
-	if ( !in.is_number() )
-		return { error::number_expected };
-
-	out = in.get_float();
-	return { error::none };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, double &out )
-{
-	if ( !in.is_number() )
-		return { error::number_expected };
-
-	out = in.get_double();
-	return { error::none };
-}
+inline error read( const json5::value &in, int &out ) { return read_number( in, out ); }
+inline error read( const json5::value &in, float &out ) { return read_number( in, out ); }
+inline error read( const json5::value &in, double &out ) { return read_number( in, out ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline error read( const json5::value &in, const char *&out )
@@ -295,7 +277,7 @@ inline error read_enum( const json5::value &in, T &out )
 			out = values[index];
 			return { error::none };
 		}
-		else if ( in.is_number() && in.get_int() == static_cast<int>( values[index] ) )
+		else if ( in.is_number() && in.get<int>() == static_cast<int>( values[index] ) )
 		{
 			out = values[index];
 			return { error::none };

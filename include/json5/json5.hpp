@@ -47,14 +47,23 @@ public:
 	bool is_array() const noexcept { return ( _data & mask_type ) == type_array; }
 
 	bool get_bool( bool val = false ) const noexcept;
-	int get_int( int val = 0 ) const noexcept { return is_number() ? static_cast<int>( _double ) : val; }
-	int64_t get_int64( int64_t val = 0 ) const noexcept { return is_number() ? static_cast<int64_t>( _double ) : val; }
-	unsigned get_uint( unsigned val = 0 ) const noexcept { return is_number() ? static_cast<unsigned>( _double ) : val; }
-	uint64_t get_uint64( int64_t val = 0 ) const noexcept { return is_number() ? static_cast<uint64_t>( _double ) : val; }
-	size_t get_size_t( size_t val = 0 ) const noexcept { return is_number() ? static_cast<size_t>( _double ) : val; }
-	float get_float( float val = 0.0f ) const noexcept { return is_number() ? static_cast<float>( _double ) : val; }
-	double get_double( double val = 0.0 ) const noexcept { return is_number() ? _double : val; }
 	const char *get_c_str( const char *val = "" ) const noexcept;
+
+	template <typename T>
+	T get( T defaultValue = 0 ) const noexcept { return is_number() ? static_cast<T>( _double ) : defaultValue; }
+
+	template <typename T>
+	bool try_get( T &out, T defaultValue = 0 ) const noexcept
+	{
+		if ( !is_number() )
+		{
+			out = defaultValue;
+			return false;
+		}
+
+		out = static_cast<T>( _double );
+		return true;
+	}
 
 	bool operator==( const value &other ) const noexcept;
 	bool operator!=( const value &other ) const noexcept { return !( ( *this ) == other ); }
@@ -297,8 +306,8 @@ inline void to_stream( std::ostream &os, const value &v, const output_style &sty
 		os << ( v.get_bool() ? "true" : "false" );
 	else if ( v.is_number() )
 	{
-		if ( double _, d = v.get_double(); modf( d, &_ ) == 0.0 )
-			os << v.get_int64();
+		if ( double _, d = v.get<double>(); modf( d, &_ ) == 0.0 )
+			os << v.get<int64_t>();
 		else
 			os << d;
 	}
