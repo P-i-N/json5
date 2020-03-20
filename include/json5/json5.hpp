@@ -11,17 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace json5::detail {
-
-using string_offset = unsigned;
-
-} // namespace json5::detail
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 namespace json5 {
-
-class value;
 
 enum class value_type { null = 0, boolean, number, array, string, object };
 
@@ -30,28 +20,62 @@ using values_t = std::vector<value>;
 class value final
 {
 public:
+	// Construct null value
 	value() noexcept = default;
+
+	// Construct null value
 	value( std::nullptr_t ) noexcept : _data( type_null ) { }
+
+	// Construct boolean value
 	value( bool val ) noexcept : _data( val ? type_true : type_false ) { }
+
+	// Construct number value from int (will be converted to double)
 	value( int val ) noexcept : _double( static_cast<double>( val ) ) { }
+
+	// Construct number value from float (will be converted to double)
 	value( float val ) noexcept : _double( static_cast<double>( val ) ) { }
+
+	// Construct number value from double
 	value( double val ) noexcept : _double( val ) { }
 
+	// Return value type
 	value_type type() const noexcept;
 
+	// Checks, if value is null
 	bool is_null() const noexcept { return _data == type_null; }
+
+	// Checks, if value stores boolean. Use 'get_bool' for reading.
 	bool is_boolean() const noexcept { return _data == type_true || _data == type_false; }
+
+	// Checks, if value stores number. Use 'get' or 'try_get' for reading.
 	bool is_number() const noexcept { return ( _data & mask_nanbits ) != mask_nanbits; }
+
+	// Checks, if value stores string. Use 'get_c_str' for reading.
 	bool is_string() const noexcept { return ( _data & mask_type ) == type_string; }
+
+	// Checks, if value stores JSON object. Use 'object_view' wrapper
+	// to iterate over key-value pairs (properties).
 	bool is_object() const noexcept { return ( _data & mask_type ) == type_object; }
+
+	// Checks, if value stores JSON array. Use 'array_view' wrapper
+	// to iterate over array elements.
 	bool is_array() const noexcept { return ( _data & mask_type ) == type_array; }
 
-	bool get_bool( bool val = false ) const noexcept;
-	const char *get_c_str( const char *val = "" ) const noexcept;
+	// Get stored bool. Returns 'defaultValue', if this value is not a boolean.
+	bool get_bool( bool defaultValue = false ) const noexcept;
 
+	// Get stored string. Returns 'defaultValue', if this value is not a string.
+	const char *get_c_str( const char *defaultValue = "" ) const noexcept;
+
+	// Get stored number as type 'T'. Returns 'defaultValue', if this value is not a number.
 	template <typename T>
-	T get( T defaultValue = 0 ) const noexcept { return is_number() ? static_cast<T>( _double ) : defaultValue; }
+	T get( T defaultValue = 0 ) const noexcept
+	{
+		return is_number() ? static_cast<T>( _double ) : defaultValue;
+	}
 
+	// Try to get stored number as type 'T'. Returns false, if this value is not a number
+	// and sets 'out' refernce to 'defaultValue'.
 	template <typename T>
 	bool try_get( T &out, T defaultValue = 0 ) const noexcept
 	{
@@ -65,13 +89,18 @@ public:
 		return true;
 	}
 
+	// Equality test against another value. Note that this might be a very expensive operation
+	// for large nested JSON objects!
 	bool operator==( const value &other ) const noexcept;
+
+	// Non-equality test
 	bool operator!=( const value &other ) const noexcept { return !( ( *this ) == other ); }
 
+	// Returns vector of values filtered with specified pattern (see README.md or json5_filter.inl)
 	values_t operator()( std::string_view pattern ) const noexcept;
 
-	template <typename T>
-	T payload() const noexcept { return ( T )( _data & mask_payload ); }
+	// Get value payload (lower 48bits of _data) converted to type 'T'
+	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
 
 private:
 	value( value_type t, uint64_t data );
@@ -96,7 +125,10 @@ private:
 	static constexpr uint64_t type_array   = 0xFFF4000000000000ull;
 	static constexpr uint64_t type_object  = 0xFFF6000000000000ull;
 
+	// Stores lower 48bits of uint64 as payload
 	void payload( uint64_t p ) noexcept { _data = ( _data & ~mask_payload ) | p; }
+
+	// Stores lower 48bits of a pointer as payload
 	void payload( const void *p ) noexcept { payload( reinterpret_cast<uint64_t>( p ) ); }
 
 	friend class document;
@@ -175,14 +207,14 @@ inline value_type value::type() const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool value::get_bool( bool val ) const noexcept
+inline bool value::get_bool( bool defaultValue ) const noexcept
 {
 	if ( _data == type_true )
 		return true;
 	else if ( _data == type_false )
 		return false;
 
-	return val;
+	return defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------

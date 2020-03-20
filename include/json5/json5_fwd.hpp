@@ -20,6 +20,16 @@
 
 namespace json5::detail {
 
+using string_offset = unsigned;
+
 template <typename T> struct enum_table : std::false_type { };
 
 } // namespace json5::detail
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace json5 {
+
+class value;
+
+} // namespace json5
