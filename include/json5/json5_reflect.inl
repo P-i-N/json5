@@ -18,108 +18,108 @@ namespace json5 {
 namespace detail {
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string_view get_name_slice(const char* names, size_t index)
+inline std::string_view get_name_slice( const char *names, size_t index )
 {
 	size_t numCommas = index;
-	while (numCommas > 0 && *names)
-		if (*names++ == ',')
+	while ( numCommas > 0 && *names )
+		if ( *names++ == ',' )
 			--numCommas;
 
-	while (*names && *names <= 32)
+	while ( *names && *names <= 32 )
 		++names;
 
 	size_t length = 0;
-	while (names[length] > 32 && names[length] != ',')
+	while ( names[length] > 32 && names[length] != ',' )
 		++length;
 
-	return std::string_view(names, length);
+	return std::string_view( names, length );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline json5::box_value write(builder& b, bool in) { return json5::box_value(in); }
-inline json5::box_value write(builder& b, int in) { return json5::box_value(static_cast<double>(in)); }
-inline json5::box_value write(builder& b, float in) { return json5::box_value(static_cast<double>(in)); }
-inline json5::box_value write(builder& b, double in) { return json5::box_value(in); }
-inline json5::box_value write(builder& b, const char* in) { return b.new_string(in); }
-inline json5::box_value write(builder& b, const std::string& in) { return b.new_string(in); }
+inline json5::box_value write( builder &b, bool in ) { return json5::box_value( in ); }
+inline json5::box_value write( builder &b, int in ) { return json5::box_value( static_cast<double>( in ) ); }
+inline json5::box_value write( builder &b, float in ) { return json5::box_value( static_cast<double>( in ) ); }
+inline json5::box_value write( builder &b, double in ) { return json5::box_value( in ); }
+inline json5::box_value write( builder &b, const char *in ) { return b.new_string( in ); }
+inline json5::box_value write( builder &b, const std::string &in ) { return b.new_string( in ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::box_value write_array(builder& b, const T* in, size_t numItems)
+inline json5::box_value write_array( builder &b, const T *in, size_t numItems )
 {
 	b.push_array();
 
-	for (size_t i = 0; i < numItems; ++i)
-		b += write(b, in[i]);
+	for ( size_t i = 0; i < numItems; ++i )
+		b += write( b, in[i] );
 
 	return b.pop();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline json5::box_value write(builder& b, const std::vector<T, A>& in) { return write_array(b, in.data(), in.size()); }
+inline json5::box_value write( builder &b, const std::vector<T, A> &in ) { return write_array( b, in.data(), in.size() ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline json5::box_value write(builder& b, const T(&in)[N]) { return write_array(b, in, N); }
+inline json5::box_value write( builder &b, const T( &in )[N] ) { return write_array( b, in, N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline json5::box_value write(builder& b, const std::array<T, N>& in) { return write_array(b, in.data(), N); }
+inline json5::box_value write( builder &b, const std::array<T, N> &in ) { return write_array( b, in.data(), N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::box_value write_map(builder& b, const T& in)
+inline json5::box_value write_map( builder &b, const T &in )
 {
 	b.push_object();
 
-	for (const auto& kvp : in)
-		b[kvp.first] = write(b, kvp.second);
+	for ( const auto &kvp : in )
+		b[kvp.first] = write( b, kvp.second );
 
 	return b.pop();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline json5::box_value write(builder& b, const std::map<K, T, P, A>& in) { return write_map(b, in); }
+inline json5::box_value write( builder &b, const std::map<K, T, P, A> &in ) { return write_map( b, in ); }
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline json5::box_value write(builder& b, const std::unordered_map<K, T, H, EQ, A>& in) { return write_map(b, in); }
+inline json5::box_value write( builder &b, const std::unordered_map<K, T, H, EQ, A> &in ) { return write_map( b, in ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline void write(builder& b, const std::tuple<Types...>& t)
+inline void write( builder &b, const std::tuple<Types...> &t )
 {
-	const auto& in = std::get<I>(t);
-	using Type = std::remove_reference_t<decltype(in)>;
+	const auto &in = std::get<I>( t );
+	using Type = std::remove_reference_t<decltype( in )>;
 
-	if (auto name = detail::get_name_slice(std::get<0>(t), I - 1); !name.empty())
+	if ( auto name = detail::get_name_slice( std::get<0>( t ), I - 1 ); !name.empty() )
 	{
-		if constexpr (std::is_enum_v<Type>)
-			b[name] = write(b, std::underlying_type_t<Type>(in));
+		if constexpr ( std::is_enum_v<Type> )
+			b[name] = write( b, std::underlying_type_t<Type>( in ) );
 		else
-			b[name] = write(b, in);
+			b[name] = write( b, in );
 	}
 
-	if constexpr (I + 1 != sizeof...(Types))
-		write<I + 1>(b, t);
+	if constexpr ( I + 1 != sizeof...( Types ) )
+		write < I + 1 > ( b, t );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::box_value write(builder& b, const T& in)
+inline json5::box_value write( builder &b, const T &in )
 {
 	b.push_object();
-	write(b, in.make_named_tuple());
+	write( b, in.make_named_tuple() );
 	return b.pop();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const json5::box_value& in, bool& out)
+inline error read( const json5::box_value &in, bool &out )
 {
-	if (!in.is_boolean())
+	if ( !in.is_boolean() )
 		return { error::number_expected };
 
 	out = in.get_bool();
@@ -127,9 +127,9 @@ inline error read(const json5::box_value& in, bool& out)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const json5::box_value& in, int& out)
+inline error read( const json5::box_value &in, int &out )
 {
-	if (!in.is_number())
+	if ( !in.is_number() )
 		return { error::number_expected };
 
 	out = in.get_int();
@@ -137,9 +137,9 @@ inline error read(const json5::box_value& in, int& out)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const json5::box_value& in, float& out)
+inline error read( const json5::box_value &in, float &out )
 {
-	if (!in.is_number())
+	if ( !in.is_number() )
 		return { error::number_expected };
 
 	out = in.get_float();
@@ -147,9 +147,9 @@ inline error read(const json5::box_value& in, float& out)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const json5::box_value& in, double& out)
+inline error read( const json5::box_value &in, double &out )
 {
-	if (!in.is_number())
+	if ( !in.is_number() )
 		return { error::number_expected };
 
 	out = in.get_double();
@@ -157,9 +157,9 @@ inline error read(const json5::box_value& in, double& out)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const json5::box_value& in, const char*& out)
+inline error read( const json5::box_value &in, const char *&out )
 {
-	if (!in.is_string())
+	if ( !in.is_string() )
 		return { error::string_expected };
 
 	out = in.get_c_str();
@@ -167,9 +167,9 @@ inline error read(const json5::box_value& in, const char*& out)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read(const json5::box_value& in, std::string& out)
+inline error read( const json5::box_value &in, std::string &out )
 {
-	if (!in.is_string())
+	if ( !in.is_string() )
 		return { error::string_expected };
 
 	out = in.get_c_str();
@@ -178,17 +178,17 @@ inline error read(const json5::box_value& in, std::string& out)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_array(const json5::box_value& in, T* out, size_t numItems)
+inline error read_array( const json5::box_value &in, T *out, size_t numItems )
 {
-	if (!in.is_array())
+	if ( !in.is_array() )
 		return { error::array_expected };
 
-	auto arr = json5::array_view(in);
-	if (arr.size() != numItems)
+	auto arr = json5::array_view( in );
+	if ( arr.size() != numItems )
 		return { error::wrong_array_size };
 
-	for (size_t i = 0; i < numItems; ++i)
-		if (auto err = read(arr[i], out[i]))
+	for ( size_t i = 0; i < numItems; ++i )
+		if ( auto err = read( arr[i], out[i] ) )
 			return err;
 
 	return { error::none };
@@ -196,25 +196,25 @@ inline error read_array(const json5::box_value& in, T* out, size_t numItems)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline error read(const json5::box_value& in, T(&out)[N]) { return read_array(in, out, N); }
+inline error read( const json5::box_value &in, T( &out )[N] ) { return read_array( in, out, N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline error read(const json5::box_value& in, std::array<T, N>& out) { return read_array(in, out.data(), N); }
+inline error read( const json5::box_value &in, std::array<T, N> &out ) { return read_array( in, out.data(), N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline error read(const json5::box_value& in, std::vector<T, A>& out)
+inline error read( const json5::box_value &in, std::vector<T, A> &out )
 {
-	if (!in.is_array() && !in.is_null())
+	if ( !in.is_array() && !in.is_null() )
 		return { error::array_expected };
 
-	auto arr = json5::array_view(in);
+	auto arr = json5::array_view( in );
 
 	out.clear();
-	out.reserve(arr.size());
-	for (const auto& i : arr)
-		if (auto err = read(i, out.emplace_back()))
+	out.reserve( arr.size() );
+	for ( const auto &i : arr )
+		if ( auto err = read( i, out.emplace_back() ) )
 			return err;
 
 	return { error::none };
@@ -222,22 +222,22 @@ inline error read(const json5::box_value& in, std::vector<T, A>& out)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_map(const json5::box_value& in, T& out)
+inline error read_map( const json5::box_value &in, T &out )
 {
-	if (!in.is_object() && !in.is_null())
+	if ( !in.is_object() && !in.is_null() )
 		return { error::object_expected };
 
 	std::pair<typename T::key_type, typename T::mapped_type> kvp;
 
 	out.clear();
-	for (auto jsKV : json5::object_view(in))
+	for ( auto jsKV : json5::object_view( in ) )
 	{
 		kvp.first = jsKV.first;
 
-		if (auto err = read(jsKV.second, kvp.second))
+		if ( auto err = read( jsKV.second, kvp.second ) )
 			return err;
 
-		out.emplace(std::move(kvp));
+		out.emplace( std::move( kvp ) );
 	}
 
 	return { error::none };
@@ -245,40 +245,40 @@ inline error read_map(const json5::box_value& in, T& out)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline error read(const json5::box_value& in, std::map<K, T, P, A>& out) { return read_map(in, out); }
+inline error read( const json5::box_value &in, std::map<K, T, P, A> &out ) { return read_map( in, out ); }
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline error read(const json5::box_value& in, std::unordered_map<K, T, H, EQ, A>& out) { return read_map(in, out); }
+inline error read( const json5::box_value &in, std::unordered_map<K, T, H, EQ, A> &out ) { return read_map( in, out ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read(const json5::box_value& in, T& out)
+inline error read( const json5::box_value &in, T &out )
 {
-	if (!in.is_object())
+	if ( !in.is_object() )
 		return { error::object_expected };
 
-	return read(json5::object_view(in), out.make_named_tuple());
+	return read( json5::object_view( in ), out.make_named_tuple() );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <size_t I = 1, typename... Types>
-inline error read(const json5::object_view& obj, std::tuple<Types...>& t)
+inline error read( const json5::object_view &obj, std::tuple<Types...> &t )
 {
-	auto& out = std::get<I>(t);
-	using Type = std::remove_reference_t<decltype(out)>;
+	auto &out = std::get<I>( t );
+	using Type = std::remove_reference_t<decltype( out )>;
 
-	auto name = get_name_slice(std::get<0>(t), I - 1);
+	auto name = get_name_slice( std::get<0>( t ), I - 1 );
 
-	auto iter = obj.find(name);
-	if (iter != obj.end())
+	auto iter = obj.find( name );
+	if ( iter != obj.end() )
 	{
-		if (auto err = read((*iter).second, out))
+		if ( auto err = read( ( *iter ).second, out ) )
 			return err;
 	}
 
-	if constexpr (I + 1 != sizeof...(Types))
+	if constexpr ( I + 1 != sizeof...( Types ) )
 	{
-		if (auto err = read<I + 1>(obj, t))
+		if ( auto err = read < I + 1 > ( obj, t ) )
 			return err;
 	}
 
@@ -291,45 +291,45 @@ inline error read(const json5::object_view& obj, std::tuple<Types...>& t)
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_document(document& doc, const T& box_value)
+inline void to_document( document &doc, const T &box_value )
 {
-	builder b(doc);
-	detail::write(b, box_value);
+	builder b( doc );
+	detail::write( b, box_value );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_stream(std::ostream& os, const T& box_value, const output_style& style = output_style())
-{
-	document doc;
-	to_document(doc, box_value);
-	to_stream(os, doc, style);
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-template <typename T>
-inline void to_string(std::string& str, const T& box_value, const output_style& style = output_style())
+inline void to_stream( std::ostream &os, const T &box_value, const output_style &style = output_style() )
 {
 	document doc;
-	to_document(doc, box_value);
-	to_string(str, doc, style);
+	to_document( doc, box_value );
+	to_stream( os, doc, style );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline std::string to_string(const T& box_value, const output_style& style = output_style())
+inline void to_string( std::string &str, const T &box_value, const output_style &style = output_style() )
+{
+	document doc;
+	to_document( doc, box_value );
+	to_string( str, doc, style );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline std::string to_string( const T &box_value, const output_style &style = output_style() )
 {
 	std::string result;
-	to_string(result, box_value, style);
+	to_string( result, box_value, style );
 	return result;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline bool to_file(const std::string& fileName, const T& box_value, const output_style& style = output_style())
+inline bool to_file( const std::string &fileName, const T &box_value, const output_style &style = output_style() )
 {
-	std::ofstream ofs(fileName);
-	to_stream(ofs, box_value, style);
+	std::ofstream ofs( fileName );
+	to_stream( ofs, box_value, style );
 	return true;
 }
 
@@ -337,31 +337,31 @@ inline bool to_file(const std::string& fileName, const T& box_value, const outpu
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_document(const document& doc, T& box_value)
+inline error from_document( const document &doc, T &box_value )
 {
-	return detail::read(doc.root(), box_value);
+	return detail::read( doc.root(), box_value );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_string(const std::string& str, T& box_value)
+inline error from_string( const std::string &str, T &box_value )
 {
 	document doc;
-	if (auto err = from_string(str, doc))
+	if ( auto err = from_string( str, doc ) )
 		return err;
 
-	return from_document(doc, box_value);
+	return from_document( doc, box_value );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_file(const std::string& fileName, T& box_value)
+inline error from_file( const std::string &fileName, T &box_value )
 {
 	document doc;
-	if (auto err = from_file(fileName, doc))
+	if ( auto err = from_file( fileName, doc ) )
 		return err;
 
-	return from_document(doc, box_value);
+	return from_document( doc, box_value );
 }
 
 } // json5

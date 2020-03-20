@@ -28,43 +28,43 @@ class box_value final
 {
 public:
 	box_value() noexcept = default;
-	box_value(std::nullptr_t) noexcept : _data(box_null) { }
-	box_value(bool val) noexcept : _data(val ? box_true : box_false) { }
-	box_value(int val) noexcept : _double(static_cast<double>(val)) { }
-	box_value(float val) noexcept : _double(static_cast<double>(val)) { }
-	box_value(double val) noexcept : _double(val) { }
+	box_value( std::nullptr_t ) noexcept : _data( box_null ) { }
+	box_value( bool val ) noexcept : _data( val ? box_true : box_false ) { }
+	box_value( int val ) noexcept : _double( static_cast<double>( val ) ) { }
+	box_value( float val ) noexcept : _double( static_cast<double>( val ) ) { }
+	box_value( double val ) noexcept : _double( val ) { }
 
 	value_type type() const noexcept;
 
 	bool is_null() const noexcept { return _data == box_null; }
 	bool is_boolean() const noexcept { return _data == box_true || _data == box_false; }
-	bool is_number() const noexcept { return (_data & box_nanbits) != box_nanbits; }
-	bool is_string() const noexcept { return (_data & box_mask) == box_string; }
-	bool is_object() const noexcept { return (_data & box_mask) == box_object; }
-	bool is_array() const noexcept { return (_data & box_mask) == box_array; }
+	bool is_number() const noexcept { return ( _data & box_nanbits ) != box_nanbits; }
+	bool is_string() const noexcept { return ( _data & box_mask ) == box_string; }
+	bool is_object() const noexcept { return ( _data & box_mask ) == box_object; }
+	bool is_array() const noexcept { return ( _data & box_mask ) == box_array; }
 
-	bool get_bool(bool val = false) const noexcept;
-	int get_int(int val = 0) const noexcept { return is_number() ? static_cast<int>(_double) : val; }
-	int64_t get_int64(int64_t val = 0) const noexcept { return is_number() ? static_cast<int64_t>(_double) : val; }
-	unsigned get_uint(unsigned val = 0) const noexcept { return is_number() ? static_cast<unsigned>(_double) : val; }
-	uint64_t get_uint64(int64_t val = 0) const noexcept { return is_number() ? static_cast<uint64_t>(_double) : val; }
-	size_t get_size_t(size_t val = 0) const noexcept { return is_number() ? static_cast<size_t>(_double) : val; }
-	float get_float(float val = 0.0f) const noexcept { return is_number() ? static_cast<float>(_double) : val; }
-	double get_double(double val = 0.0) const noexcept { return is_number() ? _double : val; }
-	const char* get_c_str(const char* val = "") const noexcept;
+	bool get_bool( bool val = false ) const noexcept;
+	int get_int( int val = 0 ) const noexcept { return is_number() ? static_cast<int>( _double ) : val; }
+	int64_t get_int64( int64_t val = 0 ) const noexcept { return is_number() ? static_cast<int64_t>( _double ) : val; }
+	unsigned get_uint( unsigned val = 0 ) const noexcept { return is_number() ? static_cast<unsigned>( _double ) : val; }
+	uint64_t get_uint64( int64_t val = 0 ) const noexcept { return is_number() ? static_cast<uint64_t>( _double ) : val; }
+	size_t get_size_t( size_t val = 0 ) const noexcept { return is_number() ? static_cast<size_t>( _double ) : val; }
+	float get_float( float val = 0.0f ) const noexcept { return is_number() ? static_cast<float>( _double ) : val; }
+	double get_double( double val = 0.0 ) const noexcept { return is_number() ? _double : val; }
+	const char *get_c_str( const char *val = "" ) const noexcept;
 
-	bool operator==(const box_value& other) const noexcept;
-	bool operator!=(const box_value& other) const noexcept { return !((*this) == other); }
+	bool operator==( const box_value &other ) const noexcept;
+	bool operator!=( const box_value &other ) const noexcept { return !( ( *this ) == other ); }
 
 	uint64_t payload() const noexcept { return _data & box_payload; }
 
 private:
 	using values_t = std::vector<box_value>;
 
-	box_value(value_type t, uint64_t data);
-	box_value(value_type t, const void* data) : box_value(t, reinterpret_cast<uint64_t>(data)) { }
+	box_value( value_type t, uint64_t data );
+	box_value( value_type t, const void *data ) : box_value( t, reinterpret_cast<uint64_t>( data ) ) { }
 
-	void relink(const class document* prevDoc, const class document& doc) noexcept;
+	void relink( const class document *prevDoc, const class document &doc ) noexcept;
 
 	// NaN-boxed data
 	union
@@ -85,8 +85,8 @@ private:
 	static const auto box_array   = 0b111111111111'0100'000000000000000000000000000000000000000000000000;
 	static const auto box_object  = 0b111111111111'0110'000000000000000000000000000000000000000000000000;
 
-	void payload(uint64_t p) noexcept { _data = (_data & ~box_payload) | p; }
-	void payload(const void* p) noexcept { payload(reinterpret_cast<uint64_t>(p)); }
+	void payload( uint64_t p ) noexcept { _data = ( _data & ~box_payload ) | p; }
+	void payload( const void *p ) noexcept { payload( reinterpret_cast<uint64_t>( p ) ); }
 
 	friend class document;
 	friend class builder;
@@ -132,13 +132,13 @@ struct error final
 namespace json5 {
 
 //---------------------------------------------------------------------------------------------------------------------
-box_value::box_value(value_type t, uint64_t data)
+box_value::box_value( value_type t, uint64_t data )
 {
-	if (t == value_type::object)
+	if ( t == value_type::object )
 		_data = box_object | data;
-	else if (t == value_type::array)
+	else if ( t == value_type::array )
 		_data = box_array | data;
-	else if (t == value_type::string)
+	else if ( t == value_type::string )
 		_data = box_string | data;
 	else
 		_data = box_null;
@@ -147,85 +147,85 @@ box_value::box_value(value_type t, uint64_t data)
 //---------------------------------------------------------------------------------------------------------------------
 inline value_type box_value::type() const noexcept
 {
-	if ((_data & box_nanbits) != box_nanbits)
+	if ( ( _data & box_nanbits ) != box_nanbits )
 		return value_type::number;
 
-	if ((_data & box_mask) == box_object)
+	if ( ( _data & box_mask ) == box_object )
 		return value_type::object;
-	else if ((_data & box_mask) == box_array)
+	else if ( ( _data & box_mask ) == box_array )
 		return value_type::array;
-	else if ((_data & box_mask) == box_string)
+	else if ( ( _data & box_mask ) == box_string )
 		return value_type::string;
-	if (_data == box_true || _data == box_false)
+	if ( _data == box_true || _data == box_false )
 		return value_type::boolean;
 
 	return value_type::null;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool box_value::get_bool(bool val) const noexcept
+inline bool box_value::get_bool( bool val ) const noexcept
 {
-	if (_data == box_true)
+	if ( _data == box_true )
 		return true;
-	else if (_data == box_false)
+	else if ( _data == box_false )
 		return false;
 
 	return val;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline const char* box_value::get_c_str(const char* defaultValue) const noexcept
+inline const char *box_value::get_c_str( const char *defaultValue ) const noexcept
 {
-	return is_string() ? reinterpret_cast<const char*>(_data & box_payload) : defaultValue;
+	return is_string() ? reinterpret_cast<const char *>( _data & box_payload ) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool box_value::operator==(const box_value& other) const noexcept
+inline bool box_value::operator==( const box_value &other ) const noexcept
 {
-	if (auto t = type(); t == other.type())
+	if ( auto t = type(); t == other.type() )
 	{
-		if (t == value_type::null)
+		if ( t == value_type::null )
 			return true;
-		else if (t == value_type::boolean)
+		else if ( t == value_type::boolean )
 			return _data == other._data;
-		else if (t == value_type::number)
+		else if ( t == value_type::number )
 			return _double == other._double;
-		else if (t == value_type::string)
+		else if ( t == value_type::string )
 			return !strcmp(
-				reinterpret_cast<const char*>(_data & box_payload),
-				reinterpret_cast<const char*>(other._data & box_payload));
-		else if (t == value_type::array)
-			return array_view(*this) == array_view(other);
-		else if (t == value_type::object)
-			return object_view(*this) == object_view(other);
+			           reinterpret_cast<const char *>( _data & box_payload ),
+			           reinterpret_cast<const char *>( other._data & box_payload ) );
+		else if ( t == value_type::array )
+			return array_view( *this ) == array_view( other );
+		else if ( t == value_type::object )
+			return object_view( *this ) == object_view( other );
 	}
 
 	return false;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void box_value::relink(const class document* prevDoc, const class document& doc) noexcept
+inline void box_value::relink( const class document *prevDoc, const class document &doc ) noexcept
 {
-	if (is_string())
+	if ( is_string() )
 	{
-		if (prevDoc)
-			payload(reinterpret_cast<const char *>(payload()) - prevDoc->_strings.data());
+		if ( prevDoc )
+			payload( reinterpret_cast<const char *>( payload() ) - prevDoc->_strings.data() );
 
-		payload(doc._strings.data() + payload());
+		payload( doc._strings.data() + payload() );
 	}
-	else if (is_object() || is_array())
+	else if ( is_object() || is_array() )
 	{
-		if (prevDoc)
-			payload(reinterpret_cast<const box_value*>(payload()) - prevDoc->_values.data());
+		if ( prevDoc )
+			payload( reinterpret_cast<const box_value *>( payload() ) - prevDoc->_values.data() );
 
-		payload(doc._values.data() + payload());
+		payload( doc._values.data() + payload() );
 	}
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream(std::ostream& os, const error& err)
+inline void to_stream( std::ostream &os, const error &err )
 {
-	const char* errStrings[] =
+	const char *errStrings[] =
 	{
 		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
 		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
@@ -236,37 +236,37 @@ inline void to_stream(std::ostream& os, const error& err)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string(const error& err)
+inline std::string to_string( const error &err )
 {
 	std::ostringstream os;
-	to_stream(os, err);
+	to_stream( os, err );
 	return os.str();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 struct output_style
 {
-	const char* indentation = "  ";
+	const char *indentation = "  ";
 	bool json_compatible = false;
 	bool ignore_defaults = false;
 };
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream(std::ostream& os, const char* str)
+inline void to_stream( std::ostream &os, const char *str )
 {
 	os << "\"";
 
-	while (*str)
+	while ( *str )
 	{
-		if (str[0] == '\n')
+		if ( str[0] == '\n' )
 			os << "\\n";
-		else if (str[0] == '\r')
+		else if ( str[0] == '\r' )
 			os << "\\r";
-		else if (str[0] == '\t')
+		else if ( str[0] == '\t' )
 			os << "\\t";
-		else if (str[0] == '"')
+		else if ( str[0] == '"' )
 			os << "\\\"";
-		else if (str[0] == '\\')
+		else if ( str[0] == '\\' )
 			os << "\\\\";
 		else
 			os << *str;
@@ -278,120 +278,120 @@ inline void to_stream(std::ostream& os, const char* str)
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream(std::ostream& os, const box_value& v, const output_style& style = output_style(), int depth = 0)
+inline void to_stream( std::ostream &os, const box_value &v, const output_style &style = output_style(), int depth = 0 )
 {
-	if (v.is_null())
+	if ( v.is_null() )
 		os << "null";
-	else if (v.is_boolean())
-		os << (v.get_bool() ? "true" : "false");
-	else if (v.is_number())
+	else if ( v.is_boolean() )
+		os << ( v.get_bool() ? "true" : "false" );
+	else if ( v.is_number() )
 	{
-		if (double _, d = v.get_double(); modf(d, &_) == 0.0)
+		if ( double _, d = v.get_double(); modf( d, &_ ) == 0.0 )
 			os << v.get_int64();
 		else
 			os << d;
 	}
-	else if (v.is_string())
-		to_stream(os, v.get_c_str());
-	else if (v.is_array())
+	else if ( v.is_string() )
+		to_stream( os, v.get_c_str() );
+	else if ( v.is_array() )
 	{
-		if (auto av = json5::array_view(v); !av.empty())
+		if ( auto av = json5::array_view( v ); !av.empty() )
 		{
 			os << "[" << std::endl;
-			for (size_t i = 0, S = av.size(); i < S; ++i)
+			for ( size_t i = 0, S = av.size(); i < S; ++i )
 			{
-				for (int i = 0; i <= depth; ++i) os << style.indentation;
-				to_stream(os, av[i], style, depth + 1);
-				if (i < S - 1) os << ",";
+				for ( int i = 0; i <= depth; ++i ) os << style.indentation;
+				to_stream( os, av[i], style, depth + 1 );
+				if ( i < S - 1 ) os << ",";
 				os << std::endl;
 			}
 
-			for (int i = 0; i < depth; ++i) os << style.indentation;
+			for ( int i = 0; i < depth; ++i ) os << style.indentation;
 			os << "]";
 		}
 		else
 			os << "[]";
 	}
-	else if (v.is_object())
+	else if ( v.is_object() )
 	{
-		if (auto ov = json5::object_view(v); !ov.empty())
+		if ( auto ov = json5::object_view( v ); !ov.empty() )
 		{
 			os << "{" << std::endl;
 			size_t count = ov.size();
-			for (auto kvp : ov)
+			for ( auto kvp : ov )
 			{
-				for (int i = 0; i <= depth; ++i) os << style.indentation;
+				for ( int i = 0; i <= depth; ++i ) os << style.indentation;
 
-				if (style.json_compatible)
-					os <<"\"" << kvp.first << "\": ";
+				if ( style.json_compatible )
+					os << "\"" << kvp.first << "\": ";
 				else
 					os << kvp.first << ": ";
 
-				to_stream(os, kvp.second, style, depth + 1);
-				if (--count) os << ",";
+				to_stream( os, kvp.second, style, depth + 1 );
+				if ( --count ) os << ",";
 				os << std::endl;
 			}
 
-			for (int i = 0; i < depth; ++i) os << style.indentation;
+			for ( int i = 0; i < depth; ++i ) os << style.indentation;
 			os << "}";
 		}
 		else
 			os << "{}";
 	}
 
-	if (!depth)
+	if ( !depth )
 		os << std::endl;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream(std::ostream& os, const document& doc, const output_style& style = output_style())
+inline void to_stream( std::ostream &os, const document &doc, const output_style &style = output_style() )
 {
-	to_stream(os, doc.root(), style, 0);
+	to_stream( os, doc.root(), style, 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string(std::string& str, const document& doc, const output_style& style = output_style())
+inline void to_string( std::string &str, const document &doc, const output_style &style = output_style() )
 {
 	std::ostringstream os;
-	to_stream(os, doc, style);
+	to_stream( os, doc, style );
 	str = os.str();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string(const document& doc, const output_style& style = output_style())
+inline std::string to_string( const document &doc, const output_style &style = output_style() )
 {
 	std::string result;
-	to_string(result, doc, style);
+	to_string( result, doc, style );
 	return result;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool to_file(const std::string& fileName, const document& doc, const output_style& style = output_style())
+inline bool to_file( const std::string &fileName, const document &doc, const output_style &style = output_style() )
 {
-	std::ofstream ofs(fileName);
-	to_stream(ofs, doc, style);
+	std::ofstream ofs( fileName );
+	to_stream( ofs, doc, style );
 	return true;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_stream(std::istream& is, document& doc)
+inline error from_stream( std::istream &is, document &doc )
 {
 	detail::reader r{ doc, is };
 	return r.parse();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_string(const std::string& str, document& doc)
+inline error from_string( const std::string &str, document &doc )
 {
-	std::istringstream is(str);
-	return from_stream(is, doc);
+	std::istringstream is( str );
+	return from_stream( is, doc );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_file(const std::string& fileName, document& doc)
+inline error from_file( const std::string &fileName, document &doc )
 {
-	std::ifstream ifs(fileName);
-	return from_stream(ifs, doc);
+	std::ifstream ifs( fileName );
+	return from_stream( ifs, doc );
 }
 
 } // namespace json5
