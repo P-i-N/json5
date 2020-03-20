@@ -30,20 +30,20 @@ class value final
 {
 public:
 	value() noexcept = default;
-	value( std::nullptr_t ) noexcept : _data( box_null ) { }
-	value( bool val ) noexcept : _data( val ? box_true : box_false ) { }
+	value( std::nullptr_t ) noexcept : _data( type_null ) { }
+	value( bool val ) noexcept : _data( val ? type_true : type_false ) { }
 	value( int val ) noexcept : _double( static_cast<double>( val ) ) { }
 	value( float val ) noexcept : _double( static_cast<double>( val ) ) { }
 	value( double val ) noexcept : _double( val ) { }
 
 	value_type type() const noexcept;
 
-	bool is_null() const noexcept { return _data == box_null; }
-	bool is_boolean() const noexcept { return _data == box_true || _data == box_false; }
-	bool is_number() const noexcept { return ( _data & box_nanbits ) != box_nanbits; }
-	bool is_string() const noexcept { return ( _data & box_mask ) == box_string; }
-	bool is_object() const noexcept { return ( _data & box_mask ) == box_object; }
-	bool is_array() const noexcept { return ( _data & box_mask ) == box_array; }
+	bool is_null() const noexcept { return _data == type_null; }
+	bool is_boolean() const noexcept { return _data == type_true || _data == type_false; }
+	bool is_number() const noexcept { return ( _data & mask_nanbits ) != mask_nanbits; }
+	bool is_string() const noexcept { return ( _data & mask_type ) == type_string; }
+	bool is_object() const noexcept { return ( _data & mask_type ) == type_object; }
+	bool is_array() const noexcept { return ( _data & mask_type ) == type_array; }
 
 	bool get_bool( bool val = false ) const noexcept;
 	int get_int( int val = 0 ) const noexcept { return is_number() ? static_cast<int>( _double ) : val; }
@@ -61,7 +61,7 @@ public:
 	values_t operator()( std::string_view pattern ) const noexcept;
 
 	template <typename T>
-	T payload() const noexcept { return ( T )( _data & box_payload ); }
+	T payload() const noexcept { return ( T )( _data & mask_payload ); }
 
 private:
 	value( value_type t, uint64_t data );
@@ -76,19 +76,17 @@ private:
 		uint64_t _data;
 	};
 
-	// _double                       |Seeeeeeeeeee|mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm|
-	// _data                         |  NaN bits  |Type|                    Payload                     |
-	static const auto box_nanbits = 0b111111111111'0000'000000000000000000000000000000000000000000000000;
-	static const auto box_mask    = 0b111111111111'1111'000000000000000000000000000000000000000000000000;
-	static const auto box_payload = 0b000000000000'0000'111111111111111111111111111111111111111111111111;
-	static const auto box_null    = 0b111111111111'1100'000000000000000000000000000000000000000000000000;
-	static const auto box_false   = 0b111111111111'0001'000000000000000000000000000000000000000000000000;
-	static const auto box_true    = 0b111111111111'0011'000000000000000000000000000000000000000000000000;
-	static const auto box_string  = 0b111111111111'0010'000000000000000000000000000000000000000000000000;
-	static const auto box_array   = 0b111111111111'0100'000000000000000000000000000000000000000000000000;
-	static const auto box_object  = 0b111111111111'0110'000000000000000000000000000000000000000000000000;
+	static constexpr uint64_t mask_nanbits = 0xFFF0000000000000ull;
+	static constexpr uint64_t mask_type    = 0xFFFF000000000000ull;
+	static constexpr uint64_t mask_payload = 0x0000FFFFFFFFFFFFull;
+	static constexpr uint64_t type_null    = 0xFFFC000000000000ull;
+	static constexpr uint64_t type_false   = 0xFFF1000000000000ull;
+	static constexpr uint64_t type_true    = 0xFFF3000000000000ull;
+	static constexpr uint64_t type_string  = 0xFFF2000000000000ull;
+	static constexpr uint64_t type_array   = 0xFFF4000000000000ull;
+	static constexpr uint64_t type_object  = 0xFFF6000000000000ull;
 
-	void payload( uint64_t p ) noexcept { _data = ( _data & ~box_payload ) | p; }
+	void payload( uint64_t p ) noexcept { _data = ( _data & ~mask_payload ) | p; }
 	void payload( const void *p ) noexcept { payload( reinterpret_cast<uint64_t>( p ) ); }
 
 	friend class document;
@@ -138,28 +136,28 @@ namespace json5 {
 value::value( value_type t, uint64_t data )
 {
 	if ( t == value_type::object )
-		_data = box_object | data;
+		_data = type_object | data;
 	else if ( t == value_type::array )
-		_data = box_array | data;
+		_data = type_array | data;
 	else if ( t == value_type::string )
-		_data = box_string | data;
+		_data = type_string | data;
 	else
-		_data = box_null;
+		_data = type_null;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline value_type value::type() const noexcept
 {
-	if ( ( _data & box_nanbits ) != box_nanbits )
+	if ( ( _data & mask_nanbits ) != mask_nanbits )
 		return value_type::number;
 
-	if ( ( _data & box_mask ) == box_object )
+	if ( ( _data & mask_type ) == type_object )
 		return value_type::object;
-	else if ( ( _data & box_mask ) == box_array )
+	else if ( ( _data & mask_type ) == type_array )
 		return value_type::array;
-	else if ( ( _data & box_mask ) == box_string )
+	else if ( ( _data & mask_type ) == type_string )
 		return value_type::string;
-	if ( _data == box_true || _data == box_false )
+	if ( _data == type_true || _data == type_false )
 		return value_type::boolean;
 
 	return value_type::null;
@@ -168,9 +166,9 @@ inline value_type value::type() const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline bool value::get_bool( bool val ) const noexcept
 {
-	if ( _data == box_true )
+	if ( _data == type_true )
 		return true;
-	else if ( _data == box_false )
+	else if ( _data == type_false )
 		return false;
 
 	return val;
@@ -179,7 +177,7 @@ inline bool value::get_bool( bool val ) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline const char *value::get_c_str( const char *defaultValue ) const noexcept
 {
-	return is_string() ? reinterpret_cast<const char *>( _data & box_payload ) : defaultValue;
+	return is_string() ? reinterpret_cast<const char *>( _data & mask_payload ) : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -195,8 +193,8 @@ inline bool value::operator==( const value &other ) const noexcept
 			return _double == other._double;
 		else if ( t == value_type::string )
 			return !strcmp(
-			           reinterpret_cast<const char *>( _data & box_payload ),
-			           reinterpret_cast<const char *>( other._data & box_payload ) );
+			           reinterpret_cast<const char *>( _data & mask_payload ),
+			           reinterpret_cast<const char *>( other._data & mask_payload ) );
 		else if ( t == value_type::array )
 			return array_view( *this ) == array_view( other );
 		else if ( t == value_type::object )
