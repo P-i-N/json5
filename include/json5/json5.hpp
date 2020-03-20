@@ -1,12 +1,13 @@
 #pragma once
 
+#include "json5_fwd.hpp"
+
 #include <cstdint>
 #include <fstream>
 #include <istream>
 #include <memory>
 #include <sstream>
 #include <string>
-#include <tuple>
 #include <unordered_map>
 #include <vector>
 
