@@ -26,6 +26,12 @@ inline void filter( const value &in, std::string_view pattern, values_t &out )
 	else
 		tail = std::string_view();
 
+	// Trim whitespace
+	{
+		while ( !head.empty() && isspace( head.front() ) ) head = head.substr( 1 );
+		while ( !head.empty() && isspace( head.back() ) ) head = head.substr( 0, head.size() - 1 );
+	}
+
 	if ( head == "*" )
 	{
 		if ( in.is_object() )
@@ -60,6 +66,14 @@ inline void filter( const value &in, std::string_view pattern, values_t &out )
 	{
 		if ( in.is_object() )
 		{
+			// Remove string quotes
+			if ( head.size() >= 2 )
+			{
+				auto first = head.front();
+				if ( ( first == '\'' || first == '"' ) && head.back() == first )
+					head = head.substr( 1, head.size() - 2 );
+			}
+
 			for ( auto kvp : object_view( in ) )
 			{
 				if ( head == kvp.first )

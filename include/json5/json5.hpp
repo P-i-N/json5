@@ -22,7 +22,7 @@ namespace json5 {
 
 class value;
 
-enum class value_type : size_t { null = 0, boolean, number, array, string, object };
+enum class value_type { null = 0, boolean, number, array, string, object };
 
 using values_t = std::vector<value>;
 

@@ -9,7 +9,6 @@ class builder
 public:
 	builder( document &doc ) : _doc( doc ) { }
 
-	document &doc() noexcept { return _doc; }
 	const document &doc() const noexcept { return _doc; }
 
 	detail::string_offset string_buffer_offset() const noexcept;
