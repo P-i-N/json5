@@ -29,47 +29,15 @@ json5::to_file("settings.json", s);
 ## Overview
 
 ### `json5::document`
-This is the root data structure for all library operations. It is an **immutable** container of all values, strings, objects and holds finished parsed representation of your JSON data. You can initialize `json5::document` either by using `json5::builder` (see below) or by using `json5::from_`* functions:
-
-**`json5::from_file`** - loads and parses JSON data from file into *`json5::document`* instance:
-```cpp
-json5::document doc;
-if (auto err = json5::from_file("myfile.json", doc))
-	std::cerr << json5::to_string(err) << std::endl;
-```
-
-**`json5::from_string`** - parses string with JSON into *`json5::document`* instance:
-```cpp
-json5::document doc;
-if (auto err = json5::from_string("{ x: 1, y: true, z: 'Hello!' }", doc))
-	std::cerr << json5::to_string(err) << std::endl;
-```
-
-**`json5::from_stream`** - parses JSON data from stream into *`json5::document`* instance
-```cpp
-std::istream myInputStream...;
-
-json5::document doc;
-if (auto err = json5::from_stream(myInputStream, doc))
-	std::cerr << json5::to_string(err) << std::endl;
-```
-
-### Writing
-**TBD**
-
-**`json5::to_file`** - saves `json5::document` instance content into a file
-
-**`json5::to_string`** - serializes `json5::document` instance into a string
-
-**`json5::to_stream`** - serializes `json5::document` instance to a stream
+This is the root data structure for all library operations. It is an **immutable** container and holds finished parsed representation of your JSON data. You can initialize `json5::document` either by using `json5::builder` (see below) or by using `json5::from_`* functions.
 
 ### Building
 
 ### `json5::builder`
 **TBD**
 
-### Traversal
-**`json5::document`** pattern
+### Filtering
+**`json5::document`** 
 
 ### Error reporting
 
@@ -85,7 +53,7 @@ if (auto err = json5::from_file("settings.json", s))
 ### Library data types
 **TBD**
 
-### `json5::box_value`
+### `json5::value`
 
 ### `json5::object_view`
 
@@ -94,6 +62,7 @@ if (auto err = json5::from_file("settings.json", s))
 ## Reflection API
 
 ### `JSON5_REFLECT(...)`
+### `JSON5_ENUM(...)`
 **TBD**
 
 ### Basic supported types
@@ -103,7 +72,55 @@ if (auto err = json5::from_file("settings.json", s))
 - `std::vector`, `std::map`, `std::unordered_map`, `std::array`
 - `C array`
 
-### Extending with other types
+## Additional examples
+- [Loading documents](#loading-documents)
+	- [Read from file](#read-from-file)
+	- [Read from string](#read-from-string)
+	- [Read from stream](#read-from-stream)
+- [Saving documents](#saving-documents)
+	- [Write to file](#write-to-file)
+	- [Write to string](#write-to-string)
+	- [Write to stream](#write-to-stream)
+- [Reflection](#reflection)
+	- [Serialize custom type](#serialize-custom-type)
+	- [Serialize enum](#serialize-enum)
+
+### Loading documents
+
+##### Read from file
+```cpp
+json5::document doc;
+if (auto err = json5::from_file("myfile.json", doc))
+	std::cerr << json5::to_string(err) << std::endl;
+```
+
+##### Read from string
+```cpp
+json5::document doc;
+if (auto err = json5::from_string("{ x: 1, y: true, z: 'Hello!' }", doc))
+	std::cerr << json5::to_string(err) << std::endl;
+```
+
+##### Read from stream
+```cpp
+std::istream myInputStream...;
+
+json5::document doc;
+if (auto err = json5::from_stream(myInputStream, doc))
+	std::cerr << json5::to_string(err) << std::endl;
+```
+
+### Saving documents
+
+##### Write to file
+
+##### Write to string
+
+##### Write to stream
+
+### Reflection
+
+##### Serialize custom type
 ```cpp
 // Let's have a 3D vector struct:
 struct vec3 { float x, y, z; };
@@ -154,4 +171,16 @@ inline error read(const json5::value& in, vec3& out)
 } // namespace json5::detail
 ```
 
-## More examples
+##### Serialize enum
+```cpp
+enum class MyEnum
+{
+	Zero,
+	First,
+	Second,
+	Third
+};
+
+// (must be placed in global namespce, requires C++20)
+JSON5_ENUM( MyEnum, Zero, First, Second, Third )
+```
