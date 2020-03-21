@@ -185,6 +185,7 @@ struct error final
 #include "json5_document.inl"
 #include "json5_builder.inl"
 #include "json5_reader.inl"
+#include "json5_output.inl"
 
 namespace json5 {
 
@@ -302,32 +303,6 @@ inline std::string to_string( const error &err )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const char *str )
-{
-	os << "\"";
-
-	while ( *str )
-	{
-		if ( str[0] == '\n' )
-			os << "\\n";
-		else if ( str[0] == '\r' )
-			os << "\\r";
-		else if ( str[0] == '\t' )
-			os << "\\t";
-		else if ( str[0] == '"' )
-			os << "\\\"";
-		else if ( str[0] == '\\' )
-			os << "\\\\";
-		else
-			os << *str;
-
-		++str;
-	}
-
-	os << "\"";
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline void to_stream( std::ostream &os, const value &v, const output_style &style = output_style(), int depth = 0 )
 {
 	if ( v.is_null() )
@@ -342,7 +317,12 @@ inline void to_stream( std::ostream &os, const value &v, const output_style &sty
 			os << d;
 	}
 	else if ( v.is_string() )
-		to_stream( os, v.get_c_str() );
+	{
+		detail::string_style ss;
+		ss.escape_unicode = style.escape_unicode;
+
+		detail::to_stream( os, v.get_c_str(), ss );
+	}
 	else if ( v.is_array() )
 	{
 		if ( auto av = json5::array_view( v ); !av.empty() )

@@ -49,7 +49,11 @@ struct output_style
 	// Empty array string
 	const char *empty_array = "[]";
 
+	// Write regular JSON (don't use any JSON5 features)
 	bool json_compatible = false;
+
+	// Escape unicode characters in strings
+	bool escape_unicode = false;
 };
 
 enum class value_type { null = 0, boolean, number, array, string, object };

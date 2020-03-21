@@ -14,7 +14,7 @@ public:
 	detail::string_offset string_buffer_offset() const noexcept;
 	detail::string_offset string_buffer_add( std::string_view str );
 	void string_buffer_add( char ch ) { _doc._strings.push_back( ch ); }
-	void string_buffer_add_utf8( char32_t ch );
+	void string_buffer_add_utf8( uint32_t ch );
 
 	value new_string( detail::string_offset stringOffset ) { return value( value_type::string, stringOffset ); }
 	value new_string( std::string_view str ) { return new_string( string_buffer_add( str ) ); }
@@ -55,7 +55,7 @@ inline detail::string_offset builder::string_buffer_add( std::string_view str )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void builder::string_buffer_add_utf8( char32_t ch )
+inline void builder::string_buffer_add_utf8( uint32_t ch )
 {
 	auto &s = _doc._strings;
 
