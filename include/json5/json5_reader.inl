@@ -341,6 +341,8 @@ inline error reader::parse_number( double &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error reader::parse_string( detail::string_offset &result )
 {
+	static constexpr char *hexChars = "0123456789abcdefABCDEF";
+
 	bool singleQuoted = peek() == '\'';
 	next(); // Consume '\'' or '"'
 
@@ -354,7 +356,7 @@ inline error reader::parse_string( detail::string_offset &result )
 		else if ( ch == '\\' && next() ) // Consume '\\'
 		{
 			ch = peek();
-			if ( ch == '\n' )
+			if ( ch == '\n' || ch == 'v' || ch == 'f' )
 				next();
 			else if ( ch == 't' && next() )
 				string_buffer_add( '\t' );
@@ -362,6 +364,8 @@ inline error reader::parse_string( detail::string_offset &result )
 				string_buffer_add( '\n' );
 			else if ( ch == 'r' && next() )
 				string_buffer_add( '\r' );
+			else if ( ch == 'b' && next() )
+				string_buffer_add( '\b' );
 			else if ( ch == '\\' && next() )
 				string_buffer_add( '\\' );
 			else if ( ch == '\'' && next() )
@@ -370,6 +374,22 @@ inline error reader::parse_string( detail::string_offset &result )
 				string_buffer_add( '"' );
 			else if ( ch == '\\' && next() )
 				string_buffer_add( '\\' );
+			else if ( ch == '/' && next() )
+				string_buffer_add( '/' );
+			else if ( ch == '0' && next() )
+				string_buffer_add( 0 );
+			else if ( ( ch == 'x' || ch == 'u' ) && next() )
+			{
+				char code[5] = { };
+
+				for ( size_t i = 0, S = ( ch == 'x' ) ? 2 : 4; i < S; ++i )
+					if ( !strchr( hexChars, code[i] = next() ) )
+						return make_error( error::invalid_escape_seq );
+
+				uint64_t unicodeChar = 0;
+				std::from_chars( code, code + 5, unicodeChar, 16 );
+				string_buffer_add_utf8( static_cast<char32_t>( unicodeChar ) );
+			}
 			else
 				return make_error( error::invalid_escape_seq );
 		}

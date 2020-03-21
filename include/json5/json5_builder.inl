@@ -14,6 +14,7 @@ public:
 	detail::string_offset string_buffer_offset() const noexcept;
 	detail::string_offset string_buffer_add( std::string_view str );
 	void string_buffer_add( char ch ) { _doc._strings.push_back( ch ); }
+	void string_buffer_add_utf8( char32_t ch );
 
 	value new_string( detail::string_offset stringOffset ) { return value( value_type::string, stringOffset ); }
 	value new_string( std::string_view str ) { return new_string( string_buffer_add( str ) ); }
@@ -51,6 +52,52 @@ inline detail::string_offset builder::string_buffer_add( std::string_view str )
 	_doc._strings += str;
 	_doc._strings.push_back( 0 );
 	return offset;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void builder::string_buffer_add_utf8( char32_t ch )
+{
+	auto &s = _doc._strings;
+
+	if ( 0 <= ch && ch <= 0x7f )
+	{
+		s += static_cast<char>( ch );
+	}
+	else if ( 0x80 <= ch && ch <= 0x7ff )
+	{
+		s += static_cast<char>( 0xc0 | ( ch >> 6 ) );
+		s += static_cast<char>( 0x80 | ( ch & 0x3f ) );
+	}
+	else if ( 0x800 <= ch && ch <= 0xffff )
+	{
+		s += static_cast<char>( 0xe0 | ( ch >> 12 ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ch & 0x3f ) );
+	}
+	else if ( 0x10000 <= ch && ch <= 0x1fffff )
+	{
+		s += static_cast<char>( 0xf0 | ( ch >> 18 ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 12 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ch & 0x3f ) );
+	}
+	else if ( 0x200000 <= ch && ch <= 0x3ffffff )
+	{
+		s += static_cast<char>( 0xf8 | ( ch >> 24 ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 18 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 12 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ch & 0x3f ) );
+	}
+	else if ( 0x4000000 <= ch && ch <= 0x7fffffff )
+	{
+		s += static_cast<char>( 0xfc | ( ch >> 30 ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 24 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 18 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 12 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
+		s += static_cast<char>( 0x80 | ( ch & 0x3f ) );
+	}
 }
 
 //---------------------------------------------------------------------------------------------------------------------
