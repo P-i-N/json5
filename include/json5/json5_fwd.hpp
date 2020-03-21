@@ -30,6 +30,28 @@ template <typename T> struct enum_table : std::false_type { };
 
 namespace json5 {
 
+/* Forward declarations */
+class document;
 class value;
+
+//---------------------------------------------------------------------------------------------------------------------
+struct output_style
+{
+	// One level of indentation
+	const char *indentation = "  ";
+
+	// Colon separator between keys and values
+	const char *colon = ": ";
+
+	// Empty object string
+	const char *empty_object = "{}";
+
+	// Empty array string
+	const char *empty_array = "[]";
+
+	bool json_compatible = false;
+};
+
+enum class value_type { null = 0, boolean, number, array, string, object };
 
 } // namespace json5

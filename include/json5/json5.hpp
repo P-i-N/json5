@@ -13,10 +13,15 @@
 
 namespace json5 {
 
-enum class value_type { null = 0, boolean, number, array, string, object };
+void to_stream( std::ostream &os, const document &doc, const output_style &style = output_style() );
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 using values_t = std::vector<value>;
 
+/*
+
+*/
 class value final
 {
 public:
@@ -158,6 +163,14 @@ struct error final
 		invalid_enum,
 	};
 
+	static constexpr char *type_string[] =
+	{
+		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
+		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
+		"number expected", "string expected", "object expected", "array expected",
+		"wrong array size", "invalid enum"
+	};
+
 	int type = none;
 	int line = 0;
 	int column = 0;
@@ -277,15 +290,7 @@ inline void value::relink( const class document *prevDoc, const class document &
 //---------------------------------------------------------------------------------------------------------------------
 inline void to_stream( std::ostream &os, const error &err )
 {
-	const char *errStrings[] =
-	{
-		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
-		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
-		"number expected", "string expected", "object expected", "array expected", "wrong array size",
-		"invalid enum"
-	};
-
-	os << errStrings[err.type] << " at " << err.line << ":" << err.column;
+	os << error::type_string[err.type] << " at " << err.line << ":" << err.column;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -295,13 +300,6 @@ inline std::string to_string( const error &err )
 	to_stream( os, err );
 	return os.str();
 }
-
-//---------------------------------------------------------------------------------------------------------------------
-struct output_style
-{
-	const char *indentation = "  ";
-	bool json_compatible = false;
-};
 
 //---------------------------------------------------------------------------------------------------------------------
 inline void to_stream( std::ostream &os, const char *str )
@@ -362,7 +360,7 @@ inline void to_stream( std::ostream &os, const value &v, const output_style &sty
 			os << "]";
 		}
 		else
-			os << "[]";
+			os << style.empty_array;
 	}
 	else if ( v.is_object() )
 	{
@@ -375,9 +373,9 @@ inline void to_stream( std::ostream &os, const value &v, const output_style &sty
 				for ( int i = 0; i <= depth; ++i ) os << style.indentation;
 
 				if ( style.json_compatible )
-					os << "\"" << kvp.first << "\": ";
+					os << "\"" << kvp.first << "\"" << style.colon;
 				else
-					os << kvp.first << ": ";
+					os << kvp.first << style.colon;
 
 				to_stream( os, kvp.second, style, depth + 1 );
 				if ( --count ) os << ",";
@@ -388,7 +386,7 @@ inline void to_stream( std::ostream &os, const value &v, const output_style &sty
 			os << "}";
 		}
 		else
-			os << "{}";
+			os << style.empty_object;
 	}
 
 	if ( !depth )
@@ -396,7 +394,7 @@ inline void to_stream( std::ostream &os, const value &v, const output_style &sty
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const document &doc, const output_style &style = output_style() )
+inline void to_stream( std::ostream &os, const document &doc, const output_style &style )
 {
 	to_stream( os, doc.root(), style, 0 );
 }
