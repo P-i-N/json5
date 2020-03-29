@@ -54,12 +54,18 @@ inline void filter( const value &in, std::string_view pattern, std::vector<value
 			filter( in, tail, out );
 
 			for ( auto kvp : object_view( in ) )
+			{
+				filter( kvp.second, tail, out );
 				filter( kvp.second, pattern, out );
+			}
 		}
 		else if ( in.is_array() )
 		{
 			for ( auto v : array_view( in ) )
+			{
+				filter( v, tail, out );
 				filter( v, pattern, out );
+			}
 		}
 	}
 	else

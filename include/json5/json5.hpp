@@ -124,7 +124,7 @@ public:
 	value operator[]( size_t index ) const noexcept;
 
 	// Returns vector of values filtered with specified pattern (see README.md or json5_filter.inl)
-	std::vector<value> operator()( std::string_view pattern ) const noexcept;
+	std::vector<value> filter( std::string_view pattern ) const noexcept;
 
 	// Get value payload (lower 48bits of _data) converted to type 'T'
 	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
@@ -219,7 +219,7 @@ inline bool value::get_bool( bool defaultValue ) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline const char *value::get_c_str( const char *defaultValue ) const noexcept
 {
-	return is_string() ? reinterpret_cast<const char *>( _data & mask_payload ) : defaultValue;
+	return is_string() ? payload<const char *>() : defaultValue;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -234,9 +234,7 @@ inline bool value::operator==( const value &other ) const noexcept
 		else if ( t == value_type::number )
 			return _double == other._double;
 		else if ( t == value_type::string )
-			return !strcmp(
-			           reinterpret_cast<const char *>( _data & mask_payload ),
-			           reinterpret_cast<const char *>( other._data & mask_payload ) );
+			return std::string_view( payload<const char *>() ) == std::string_view( other.payload<const char *>() );
 		else if ( t == value_type::array )
 			return array_view( *this ) == array_view( other );
 		else if ( t == value_type::object )
@@ -267,7 +265,7 @@ inline value value::operator[]( size_t index ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::vector<value> value::operator()( std::string_view pattern ) const noexcept
+inline std::vector<value> value::filter( std::string_view pattern ) const noexcept
 {
 	std::vector<value> result;
 	detail::filter( *this, pattern, result );
