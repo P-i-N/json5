@@ -119,12 +119,16 @@ public:
 	// Non-equality test
 	bool operator!=( const value &other ) const noexcept { return !( ( *this ) == other ); }
 
+	// Try to convert this value into object and
 	value operator[]( std::string_view key ) const noexcept;
 
 	value operator[]( size_t index ) const noexcept;
 
 	// Returns vector of values filtered with specified pattern (see README.md or json5_filter.inl)
 	std::vector<value> filter( std::string_view pattern ) const noexcept;
+
+	// Filter values with specified pattern through custom callback
+	template <typename Func> void filter( std::string_view pattern, Func &&func ) const noexcept;
 
 	// Get value payload (lower 48bits of _data) converted to type 'T'
 	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
@@ -267,9 +271,14 @@ inline value value::operator[]( size_t index ) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline std::vector<value> value::filter( std::string_view pattern ) const noexcept
 {
-	std::vector<value> result;
-	detail::filter( *this, pattern, result );
-	return result;
+	return detail::filter( *this, pattern );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <typename Func>
+inline void value::filter( std::string_view pattern, Func &&func ) const noexcept
+{
+	detail::filter( *this, pattern, std::forward<Func>( func ) );
 }
 
 //---------------------------------------------------------------------------------------------------------------------

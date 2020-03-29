@@ -7,11 +7,12 @@
 namespace json5::detail {
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void filter( const value &in, std::string_view pattern, std::vector<value> &out )
+template <typename Func>
+inline void filter( const value &in, std::string_view pattern, Func &&func )
 {
 	if ( pattern.empty() )
 	{
-		out.push_back( in );
+		func( in );
 		return;
 	}
 
@@ -28,8 +29,8 @@ inline void filter( const value &in, std::string_view pattern, std::vector<value
 
 	// Trim whitespace
 	{
-		while ( !head.empty() && isspace( head.front() ) ) head = head.substr( 1 );
-		while ( !head.empty() && isspace( head.back() ) ) head = head.substr( 0, head.size() - 1 );
+		while ( !head.empty() && isspace( head.front() ) ) head.remove_prefix( 1 );
+		while ( !head.empty() && isspace( head.back() ) ) head.remove_suffix( 1 );
 	}
 
 	if ( head == "*" )
@@ -37,34 +38,34 @@ inline void filter( const value &in, std::string_view pattern, std::vector<value
 		if ( in.is_object() )
 		{
 			for ( auto kvp : object_view( in ) )
-				filter( kvp.second, tail, out );
+				filter( kvp.second, tail, std::forward<Func>( func ) );
 		}
 		else if ( in.is_array() )
 		{
 			for ( auto v : array_view( in ) )
-				filter( v, tail, out );
+				filter( v, tail, std::forward<Func>( func ) );
 		}
 		else
-			filter( in, std::string_view(), out );
+			filter( in, std::string_view(), std::forward<Func>( func ) );
 	}
 	else if ( head == "**" )
 	{
 		if ( in.is_object() )
 		{
-			filter( in, tail, out );
+			filter( in, tail, std::forward<Func>( func ) );
 
 			for ( auto kvp : object_view( in ) )
 			{
-				filter( kvp.second, tail, out );
-				filter( kvp.second, pattern, out );
+				filter( kvp.second, tail, std::forward<Func>( func ) );
+				filter( kvp.second, pattern, std::forward<Func>( func ) );
 			}
 		}
 		else if ( in.is_array() )
 		{
 			for ( auto v : array_view( in ) )
 			{
-				filter( v, tail, out );
-				filter( v, pattern, out );
+				filter( v, tail, std::forward<Func>( func ) );
+				filter( v, pattern, std::forward<Func>( func ) );
 			}
 		}
 	}
@@ -83,10 +84,18 @@ inline void filter( const value &in, std::string_view pattern, std::vector<value
 			for ( auto kvp : object_view( in ) )
 			{
 				if ( head == kvp.first )
-					filter( kvp.second, tail, out );
+					filter( kvp.second, tail, std::forward<Func>( func ) );
 			}
 		}
 	}
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline std::vector<value> filter( const value &in, std::string_view pattern )
+{
+	std::vector<value> result;
+	filter( in, pattern, [&result]( const value & v ) { result.push_back( v ); } );
+	return result;
 }
 
 } // namespace json5::detail
