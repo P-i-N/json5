@@ -40,8 +40,8 @@ inline std::string_view get_name_slice( const char *names, size_t index )
 
 //---------------------------------------------------------------------------------------------------------------------
 inline json5::value write( writer &w, bool in ) { return json5::value( in ); }
-inline json5::value write( writer &w, int in ) { return json5::value( static_cast<double>( in ) ); }
-inline json5::value write( writer &w, float in ) { return json5::value( static_cast<double>( in ) ); }
+inline json5::value write( writer &w, int in ) { return json5::value( double( in ) ); }
+inline json5::value write( writer &w, float in ) { return json5::value( double( in ) ); }
 inline json5::value write( writer &w, double in ) { return json5::value( in ); }
 inline json5::value write( writer &w, const char *in ) { return w.new_string( in ); }
 inline json5::value write( writer &w, const std::string &in ) { return w.new_string( in ); }
@@ -299,7 +299,7 @@ inline error read_enum( const json5::value &in, T &out )
 			out = values[index];
 			return { error::none };
 		}
-		else if ( in.is_number() && in.get<int>() == static_cast<int>( values[index] ) )
+		else if ( in.is_number() && in.get<int>() == int( values[index] ) )
 		{
 			out = values[index];
 			return { error::none };
@@ -336,7 +336,7 @@ inline error read( const json5::object_view &obj, std::tuple<Types...> &t )
 				if ( auto err = read( ( *iter ).second, temp ) )
 					return err;
 
-				out = static_cast<Type>( temp );
+				out = Type( temp );
 			}
 		}
 		else

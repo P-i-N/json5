@@ -53,10 +53,10 @@ public:
 	value( bool val ) noexcept : _data( val ? type_true : type_false ) { }
 
 	// Construct number value from int (will be converted to double)
-	value( int val ) noexcept : _double( static_cast<double>( val ) ) { }
+	value( int val ) noexcept : _double( val ) { }
 
 	// Construct number value from float (will be converted to double)
-	value( float val ) noexcept : _double( static_cast<double>( val ) ) { }
+	value( float val ) noexcept : _double( val ) { }
 
 	// Construct number value from double
 	value( double val ) noexcept : _double( val ) { }
@@ -94,7 +94,7 @@ public:
 	template <typename T>
 	T get( T defaultValue = 0 ) const noexcept
 	{
-		return is_number() ? static_cast<T>( _double ) : defaultValue;
+		return is_number() ? T( _double ) : defaultValue;
 	}
 
 	// Try to get stored number as type 'T'. Returns false, if this value is not a number
@@ -108,7 +108,7 @@ public:
 			return false;
 		}
 
-		out = static_cast<T>( _double );
+		out = T( _double );
 		return true;
 	}
 

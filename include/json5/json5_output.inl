@@ -28,7 +28,7 @@ inline void to_stream( std::ostream &os, const char *str, char quotes, bool esca
 			os << "\\'";
 		else if ( str[0] == '\\' )
 			os << "\\\\";
-		else if ( static_cast<uint8_t>( str[0] ) >= 128 && escapeUnicode )
+		else if ( uint8_t( str[0] ) >= 128 && escapeUnicode )
 		{
 			uint32_t ch = 0;
 

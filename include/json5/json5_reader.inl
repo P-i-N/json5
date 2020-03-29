@@ -388,7 +388,7 @@ inline error reader::parse_string( detail::string_offset &result )
 
 				uint64_t unicodeChar = 0;
 				std::from_chars( code, code + 5, unicodeChar, 16 );
-				string_buffer_add_utf8( static_cast<uint32_t>( unicodeChar ) );
+				string_buffer_add_utf8( uint32_t( unicodeChar ) );
 			}
 			else
 				return make_error( error::invalid_escape_seq );

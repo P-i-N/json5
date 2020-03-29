@@ -41,7 +41,7 @@ protected:
 //---------------------------------------------------------------------------------------------------------------------
 inline detail::string_offset builder::string_buffer_offset() const noexcept
 {
-	return static_cast<detail::string_offset>( _doc._strings.size() );
+	return detail::string_offset( _doc._strings.size() );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ inline value builder::pop()
 
 	result.payload( _doc._values.size() );
 
-	_doc._values.push_back( value( static_cast<double>( count ) ) );
+	_doc._values.push_back( value( double( count ) ) );
 
 	auto startIndex = _values.size() - count;
 	for ( size_t i = startIndex, S = _values.size(); i < S; ++i )
