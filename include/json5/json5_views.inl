@@ -9,7 +9,7 @@ namespace json5 {
 class object_view final
 {
 public:
-	object_view( const value &v )
+	object_view( const value &v ) noexcept
 		: _pair( v.is_object() ? ( v.payload<const value *>() + 1 ) : nullptr )
 		, _count( _pair ? ( _pair[-1].get<size_t>() / 2 ) : 0 )
 	{ }
@@ -19,10 +19,10 @@ public:
 	class iterator final
 	{
 	public:
-		iterator( const value *p = nullptr ) : _pair( p ) { }
+		iterator( const value *p = nullptr ) noexcept : _pair( p ) { }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
-		iterator &operator++() { _pair += 2; return *this; }
-		key_value_pair operator*() const { return key_value_pair( _pair[0].get_c_str(), _pair[1] ); }
+		iterator &operator++() noexcept { _pair += 2; return *this; }
+		key_value_pair operator*() const noexcept { return key_value_pair( _pair[0].get_c_str(), _pair[1] ); }
 
 	private:
 		const value *_pair = nullptr;
@@ -48,7 +48,7 @@ private:
 class array_view final
 {
 public:
-	array_view( const value &v )
+	array_view( const value &v ) noexcept
 		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
 		, _count( _value ? _value[-1].get<size_t>() : 0 )
 	{ }
@@ -74,9 +74,12 @@ private:
 //---------------------------------------------------------------------------------------------------------------------
 inline object_view::iterator object_view::find( std::string_view key ) const noexcept
 {
-	for ( auto iter = begin(); iter != end(); ++iter )
-		if ( key == ( *iter ).first )
-			return iter;
+	if ( !key.empty() )
+	{
+		for ( auto iter = begin(); iter != end(); ++iter )
+			if ( key == ( *iter ).first )
+				return iter;
+	}
 
 	return end();
 }
@@ -84,7 +87,7 @@ inline object_view::iterator object_view::find( std::string_view key ) const noe
 //---------------------------------------------------------------------------------------------------------------------
 inline value object_view::operator[]( std::string_view key ) const noexcept
 {
-	auto iter = find( key );
+	const auto iter = find( key );
 	return ( iter != end() ) ? ( *iter ).second : value();
 }
 
@@ -102,10 +105,12 @@ inline bool object_view::operator==( const object_view &other ) const noexcept
 	key_value_pair tempPairs2[stack_pair_count];
 	key_value_pair *pairs1 = _count <= stack_pair_count ? tempPairs1 : new key_value_pair[_count];
 	key_value_pair *pairs2 = _count <= stack_pair_count ? tempPairs2 : new key_value_pair[_count];
-	{ size_t i = 0; for ( auto kvp : *this ) pairs1[i++] = kvp; }
-	{ size_t i = 0; for ( auto kvp : other ) pairs2[i++] = kvp; }
+	{ size_t i = 0; for ( const auto kvp : *this ) pairs1[i++] = kvp; }
+	{ size_t i = 0; for ( const auto kvp : other ) pairs2[i++] = kvp; }
 
-	auto comp = []( const key_value_pair & a, const key_value_pair & b )->bool { return strcmp( a.first, b.first ) < 0; };
+	const auto comp = []( const key_value_pair & a, const key_value_pair & b ) noexcept -> bool
+	{ return strcmp( a.first, b.first ) < 0; };
+
 	std::sort( pairs1, pairs1 + _count, comp );
 	std::sort( pairs2, pairs2 + _count, comp );
 
