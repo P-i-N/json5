@@ -136,13 +136,7 @@ inline value builder::pop()
 
 	if ( _stack.empty() )
 	{
-		static_cast<value &>( _doc ) = result;
-
-		for ( auto &v : _doc._values )
-			v.relink( nullptr, _doc );
-
-		_doc.relink( nullptr, _doc );
-
+		_doc.assign_root( result );
 		result = _doc;
 	}
 
