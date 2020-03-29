@@ -19,7 +19,7 @@ public:
 
 	const value &root() const noexcept { return _values[0]; }
 
-	values_t operator()( std::string_view pattern ) const noexcept { return root()( pattern ); }
+	std::vector<value> operator()( std::string_view pattern ) const noexcept { return root()( pattern ); }
 
 private:
 	void assign_copy( const document &copy );
@@ -35,7 +35,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-void document::assign_copy( const document &copy )
+inline void document::assign_copy( const document &copy )
 {
 	_strings = copy._strings;
 	_values = copy._values;
@@ -45,7 +45,7 @@ void document::assign_copy( const document &copy )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-void document::assign_rvalue( document &&rValue ) noexcept
+inline void document::assign_rvalue( document &&rValue ) noexcept
 {
 	_strings = std::move( rValue._strings );
 	_values = std::move( rValue._values );

@@ -33,6 +33,7 @@ public:
 	iterator find( std::string_view key ) const noexcept;
 	size_t size() const noexcept { return _count; }
 	bool empty() const noexcept { return size() == 0; }
+	value operator[]( std::string_view key ) const noexcept;
 
 	bool operator==( const object_view &other ) const noexcept;
 	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
@@ -58,7 +59,7 @@ public:
 	iterator end() const noexcept { return _value + _count; }
 	size_t size() const noexcept { return _count; }
 	bool empty() const noexcept { return _count == 0; }
-	const value &operator[]( size_t index ) const noexcept { return _value[index]; }
+	value operator[]( size_t index ) const noexcept { return _value[index]; }
 
 	bool operator==( const array_view &other ) const noexcept;
 	bool operator!=( const array_view &other ) const noexcept { return !( ( *this ) == other ); }
@@ -78,6 +79,13 @@ inline object_view::iterator object_view::find( std::string_view key ) const noe
 			return iter;
 
 	return end();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value object_view::operator[]( std::string_view key ) const noexcept
+{
+	auto iter = find( key );
+	return ( iter != end() ) ? ( *iter ).second : value();
 }
 
 //---------------------------------------------------------------------------------------------------------------------

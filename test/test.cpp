@@ -95,8 +95,11 @@ int main( int argc, char *argv[] )
 		}
 
 		{
+			json5::writer_params wp;
+			wp.compact = true;
+
 			Stopwatch sw{ "Save twitter.json5" };
-			json5::to_file( "twitter.json5", doc1 );
+			json5::to_file( "twitter.json5", doc1, wp );
 		}
 
 		{

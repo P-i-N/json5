@@ -1,10 +1,9 @@
 #pragma once
 
-#include "json5_fwd.hpp"
+#include "json5_base.hpp"
 
 #include <cstdint>
 #include <fstream>
-#include <istream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -13,16 +12,35 @@
 
 namespace json5 {
 
-void to_stream( std::ostream &os, const document &doc, const output_style &style = output_style() );
+// Writes json5::document into stream
+void to_stream( std::ostream &os, const document &doc, const writer_params &wp = writer_params() );
+
+// Converts json5::document to string
+void to_string( std::string &str, const document &doc, const writer_params &wp = writer_params() );
+
+// Returns json5::document converted to string
+std::string to_string( const document &doc, const writer_params &wp = writer_params() );
+
+// Write json5::document into file, returns 'true' on success
+bool to_file( const std::string &fileName, const document &doc, const writer_params &wp = writer_params() );
+
+// Parse json5::document from stream
+error from_stream( std::istream &is, document &doc );
+
+// Parse json5::document from string
+error from_string( const std::string &str, document &doc );
+
+// Parse json5::document from file
+error from_file( const std::string &fileName, document &doc );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-using values_t = std::vector<value>;
-
 /*
 
+json5::value
+
 */
-class value final
+class value
 {
 public:
 	// Construct null value
@@ -101,8 +119,12 @@ public:
 	// Non-equality test
 	bool operator!=( const value &other ) const noexcept { return !( ( *this ) == other ); }
 
+	value operator[]( std::string_view key ) const noexcept;
+
+	value operator[]( size_t index ) const noexcept;
+
 	// Returns vector of values filtered with specified pattern (see README.md or json5_filter.inl)
-	values_t operator()( std::string_view pattern ) const noexcept;
+	std::vector<value> operator()( std::string_view pattern ) const noexcept;
 
 	// Get value payload (lower 48bits of _data) converted to type 'T'
 	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
@@ -140,44 +162,6 @@ private:
 	friend class builder;
 };
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-struct error final
-{
-	enum
-	{
-		none,
-		invalid_root,
-		unexpected_end,
-		syntax_error,
-		invalid_literal,
-		invalid_escape_seq,
-		comma_expected,
-		colon_expected,
-		boolean_expected,
-		number_expected,
-		string_expected,
-		object_expected,
-		array_expected,
-		wrong_array_size,
-		invalid_enum,
-	};
-
-	static constexpr char *type_string[] =
-	{
-		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
-		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
-		"number expected", "string expected", "object expected", "array expected",
-		"wrong array size", "invalid enum"
-	};
-
-	int type = none;
-	int line = 0;
-	int column = 0;
-
-	operator int() const noexcept { return type; }
-};
-
 } // namespace json5
 
 #include "json5_views.inl"
@@ -186,11 +170,12 @@ struct error final
 #include "json5_builder.inl"
 #include "json5_reader.inl"
 #include "json5_output.inl"
+#include "json5_reflect.inl"
 
 namespace json5 {
 
 //---------------------------------------------------------------------------------------------------------------------
-value::value( value_type t, uint64_t data )
+inline value::value( value_type t, uint64_t data )
 {
 	if ( t == value_type::object )
 		_data = type_object | data;
@@ -262,9 +247,29 @@ inline bool value::operator==( const value &other ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline values_t value::operator()( std::string_view pattern ) const noexcept
+inline value value::operator[]( std::string_view key ) const noexcept
 {
-	values_t result;
+	if ( !is_object() )
+		return value();
+
+	object_view ov( *this );
+	return ov[key];
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline value value::operator[]( size_t index ) const noexcept
+{
+	if ( !is_array() )
+		return value();
+
+	array_view av( *this );
+	return av[index];
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline std::vector<value> value::operator()( std::string_view pattern ) const noexcept
+{
+	std::vector<value> result;
 	detail::filter( *this, pattern, result );
 	return result;
 }
@@ -303,103 +308,32 @@ inline std::string to_string( const error &err )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const value &v, const output_style &style = output_style(), int depth = 0 )
+inline void to_stream( std::ostream &os, const document &doc, const writer_params &wp )
 {
-	if ( v.is_null() )
-		os << "null";
-	else if ( v.is_boolean() )
-		os << ( v.get_bool() ? "true" : "false" );
-	else if ( v.is_number() )
-	{
-		if ( double _, d = v.get<double>(); modf( d, &_ ) == 0.0 )
-			os << v.get<int64_t>();
-		else
-			os << d;
-	}
-	else if ( v.is_string() )
-	{
-		detail::string_style ss;
-		ss.escape_unicode = style.escape_unicode;
-
-		detail::to_stream( os, v.get_c_str(), ss );
-	}
-	else if ( v.is_array() )
-	{
-		if ( auto av = json5::array_view( v ); !av.empty() )
-		{
-			os << "[" << std::endl;
-			for ( size_t i = 0, S = av.size(); i < S; ++i )
-			{
-				for ( int i = 0; i <= depth; ++i ) os << style.indentation;
-				to_stream( os, av[i], style, depth + 1 );
-				if ( i < S - 1 ) os << ",";
-				os << std::endl;
-			}
-
-			for ( int i = 0; i < depth; ++i ) os << style.indentation;
-			os << "]";
-		}
-		else
-			os << style.empty_array;
-	}
-	else if ( v.is_object() )
-	{
-		if ( auto ov = json5::object_view( v ); !ov.empty() )
-		{
-			os << "{" << std::endl;
-			size_t count = ov.size();
-			for ( auto kvp : ov )
-			{
-				for ( int i = 0; i <= depth; ++i ) os << style.indentation;
-
-				if ( style.json_compatible )
-					os << "\"" << kvp.first << "\"" << style.colon;
-				else
-					os << kvp.first << style.colon;
-
-				to_stream( os, kvp.second, style, depth + 1 );
-				if ( --count ) os << ",";
-				os << std::endl;
-			}
-
-			for ( int i = 0; i < depth; ++i ) os << style.indentation;
-			os << "}";
-		}
-		else
-			os << style.empty_object;
-	}
-
-	if ( !depth )
-		os << std::endl;
+	detail::to_stream( os, doc.root(), wp, 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const document &doc, const output_style &style )
-{
-	to_stream( os, doc.root(), style, 0 );
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void to_string( std::string &str, const document &doc, const output_style &style = output_style() )
+inline void to_string( std::string &str, const document &doc, const writer_params &wp )
 {
 	std::ostringstream os;
-	to_stream( os, doc, style );
+	to_stream( os, doc, wp );
 	str = os.str();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string( const document &doc, const output_style &style = output_style() )
+inline std::string to_string( const document &doc, const writer_params &wp )
 {
 	std::string result;
-	to_string( result, doc, style );
+	to_string( result, doc, wp );
 	return result;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool to_file( const std::string &fileName, const document &doc, const output_style &style = output_style() )
+inline bool to_file( const std::string &fileName, const document &doc, const writer_params &wp )
 {
 	std::ofstream ofs( fileName );
-	to_stream( ofs, doc, style );
+	to_stream( ofs, doc, wp );
 	return true;
 }
 
@@ -425,5 +359,3 @@ inline error from_file( const std::string &fileName, document &doc )
 }
 
 } // namespace json5
-
-#include "json5_reflect.inl"

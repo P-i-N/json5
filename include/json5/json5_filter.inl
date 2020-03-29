@@ -7,7 +7,7 @@
 namespace json5::detail {
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void filter( const value &in, std::string_view pattern, values_t &out )
+inline void filter( const value &in, std::string_view pattern, std::vector<value> &out )
 {
 	if ( pattern.empty() )
 	{
