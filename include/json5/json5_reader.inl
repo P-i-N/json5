@@ -61,10 +61,10 @@ inline error reader::parse()
 {
 	reset();
 
-	if ( auto err = parse_value( root() ) )
+	if ( auto err = parse_value( _doc ) )
 		return err;
 
-	if ( !root().is_array() && !root().is_object() )
+	if ( !_doc.is_array() && !_doc.is_object() )
 		return make_error( error::invalid_root );
 
 	return { error::none };

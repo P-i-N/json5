@@ -23,6 +23,7 @@
 namespace json5 {
 
 /* Forward declarations */
+class builder;
 class document;
 class value;
 

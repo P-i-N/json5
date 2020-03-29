@@ -28,7 +28,6 @@ public:
 	value &operator[]( std::string_view key ) { return ( *this )[string_buffer_add( key )]; }
 
 protected:
-	value &root() noexcept { return _doc._values[0]; }
 	void reset() noexcept;
 
 	document &_doc;
@@ -122,7 +121,7 @@ inline value builder::pop()
 	auto result = _stack.back();
 	auto count = _counts.back();
 
-	result._data |= _doc._values.size();
+	result.payload( _doc._values.size() );
 
 	_doc._values.push_back( value( static_cast<double>( count ) ) );
 
@@ -132,18 +131,21 @@ inline value builder::pop()
 
 	_values.resize( _values.size() - count );
 
-	if ( _stack.size() == 1 )
+	_stack.pop_back();
+	_counts.pop_back();
+
+	if ( _stack.empty() )
 	{
-		_doc._values[0] = result;
+		static_cast<value &>( _doc ) = result;
 
 		for ( auto &v : _doc._values )
 			v.relink( nullptr, _doc );
 
-		result = _doc._values[0];
+		_doc.relink( nullptr, _doc );
+
+		result = _doc;
 	}
 
-	_stack.pop_back();
-	_counts.pop_back();
 	return result;
 }
 
@@ -166,7 +168,7 @@ inline value &builder::operator[]( detail::string_offset keyOffset )
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::reset() noexcept
 {
-	_doc._values = { value() };
+	_doc._values.clear();
 	_doc._strings.clear();
 	_doc._strings.push_back( 0 );
 }

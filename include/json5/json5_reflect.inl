@@ -419,7 +419,7 @@ inline bool to_file( const std::string &fileName, const T &in, const writer_para
 template <typename T>
 inline error from_document( const document &doc, T &out )
 {
-	return detail::read( doc.root(), out );
+	return detail::read( doc, out );
 }
 
 //---------------------------------------------------------------------------------------------------------------------

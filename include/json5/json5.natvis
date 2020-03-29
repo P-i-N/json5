@@ -31,10 +31,4 @@
 			</ArrayItems>
 		</Expand>
 	</Type>
-	<Type Name="json5::document">
-		<DisplayString>{ _values[0] }</DisplayString>
-		<Expand>
-			<Item Name="[root]">_values[0]</Item>
-		</Expand>
-	</Type>
 </AutoVisualizer>

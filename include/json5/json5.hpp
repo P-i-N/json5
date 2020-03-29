@@ -129,7 +129,7 @@ public:
 	// Get value payload (lower 48bits of _data) converted to type 'T'
 	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
 
-private:
+protected:
 	value( value_type t, uint64_t data );
 	value( value_type t, const void *data ) : value( t, reinterpret_cast<uint64_t>( data ) ) { }
 
@@ -158,8 +158,8 @@ private:
 	// Stores lower 48bits of a pointer as payload
 	void payload( const void *p ) noexcept { payload( reinterpret_cast<uint64_t>( p ) ); }
 
-	friend class document;
-	friend class builder;
+	friend document;
+	friend builder;
 };
 
 } // namespace json5
@@ -310,7 +310,7 @@ inline std::string to_string( const error &err )
 //---------------------------------------------------------------------------------------------------------------------
 inline void to_stream( std::ostream &os, const document &doc, const writer_params &wp )
 {
-	detail::to_stream( os, doc.root(), wp, 0 );
+	detail::to_stream( os, doc, wp, 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------

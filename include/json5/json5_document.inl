@@ -4,7 +4,7 @@
 
 namespace json5 {
 
-class document final
+class document final : public value
 {
 public:
 	document() = default;
@@ -14,22 +14,15 @@ public:
 	document &operator=( const document &copy ) { assign_copy( copy ); return *this; }
 	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); return *this; }
 
-	bool operator==( const document &other ) const noexcept { return root() == other.root(); }
-	bool operator!=( const document &other ) const noexcept { return !( ( *this ) == other ); }
-
-	const value &root() const noexcept { return _values[0]; }
-
-	std::vector<value> operator()( std::string_view pattern ) const noexcept { return root()( pattern ); }
-
 private:
 	void assign_copy( const document &copy );
 	void assign_rvalue( document &&rValue ) noexcept;
 
 	std::string _strings;
-	std::vector<value> _values = { value() };
+	std::vector<value> _values;
 
 	friend value;
-	friend class builder;
+	friend builder;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
