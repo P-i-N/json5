@@ -25,6 +25,7 @@ namespace json5 {
 /* Forward declarations */
 class builder;
 class document;
+class parser;
 class value;
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -96,6 +97,23 @@ enum class value_type { null = 0, boolean, number, array, string, object };
 namespace json5::detail {
 
 using string_offset = unsigned;
+
 template <typename T> struct enum_table : std::false_type { };
+
+class char_source
+{
+public:
+	virtual ~char_source() = default;
+
+	virtual char next() = 0;
+	virtual char peek() = 0;
+	virtual bool eof() const = 0;
+
+	error make_error( int type ) const noexcept { return error{ type, _line, _column }; }
+
+protected:
+	int _line = 1;
+	int _column = 1;
+};
 
 } // namespace json5::detail

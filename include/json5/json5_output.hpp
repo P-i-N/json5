@@ -3,8 +3,24 @@
 #include "json5.hpp"
 
 #include <iomanip>
+#include <fstream>
+#include <sstream>
 
-namespace json5::detail {
+namespace json5 {
+
+// Writes json5::document into stream
+void to_stream( std::ostream &os, const document &doc, const writer_params &wp = writer_params() );
+
+// Converts json5::document to string
+void to_string( std::string &str, const document &doc, const writer_params &wp = writer_params() );
+
+// Returns json5::document converted to string
+std::string to_string( const document &doc, const writer_params &wp = writer_params() );
+
+// Write json5::document into file, returns 'true' on success
+bool to_file( const std::string &fileName, const document &doc, const writer_params &wp = writer_params() );
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
 inline void to_stream( std::ostream &os, const char *str, char quotes, bool escapeUnicode )
@@ -114,7 +130,7 @@ inline void to_stream( std::ostream &os, const value &v, const writer_params &wp
 	}
 	else if ( v.is_string() )
 	{
-		detail::to_stream( os, v.get_c_str(), '"', wp.escape_unicode );
+		to_stream( os, v.get_c_str(), '"', wp.escape_unicode );
 	}
 	else if ( v.is_array() )
 	{
@@ -166,4 +182,49 @@ inline void to_stream( std::ostream &os, const value &v, const writer_params &wp
 		os << eol;
 }
 
-} // namespace json5::detail
+//---------------------------------------------------------------------------------------------------------------------
+inline void to_stream( std::ostream &os, const document &doc, const writer_params &wp )
+{
+	to_stream( os, doc, wp, 0 );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void to_string( std::string &str, const document &doc, const writer_params &wp )
+{
+	std::ostringstream os;
+	to_stream( os, doc, wp );
+	str = os.str();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline std::string to_string( const document &doc, const writer_params &wp )
+{
+	std::string result;
+	to_string( result, doc, wp );
+	return result;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline bool to_file( const std::string &fileName, const document &doc, const writer_params &wp )
+{
+	std::ofstream ofs( fileName );
+	to_stream( ofs, doc, wp );
+	return true;
+}
+
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void to_stream( std::ostream &os, const error &err )
+{
+	os << error::type_string[err.type] << " at " << err.line << ":" << err.column;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline std::string to_string( const error &err )
+{
+	std::ostringstream os;
+	to_stream( os, err );
+	return os.str();
+}
+
+} // namespace json5

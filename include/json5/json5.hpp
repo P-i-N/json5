@@ -2,38 +2,12 @@
 
 #include "json5_base.hpp"
 
+#include <algorithm>
 #include <cstdint>
-#include <fstream>
-#include <memory>
-#include <sstream>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace json5 {
-
-// Writes json5::document into stream
-void to_stream( std::ostream &os, const document &doc, const writer_params &wp = writer_params() );
-
-// Converts json5::document to string
-void to_string( std::string &str, const document &doc, const writer_params &wp = writer_params() );
-
-// Returns json5::document converted to string
-std::string to_string( const document &doc, const writer_params &wp = writer_params() );
-
-// Write json5::document into file, returns 'true' on success
-bool to_file( const std::string &fileName, const document &doc, const writer_params &wp = writer_params() );
-
-// Parse json5::document from stream
-error from_stream( std::istream &is, document &doc );
-
-// Parse json5::document from string
-error from_string( const std::string &str, document &doc );
-
-// Parse json5::document from file
-error from_file( const std::string &fileName, document &doc );
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
 
@@ -119,16 +93,13 @@ public:
 	// Non-equality test
 	bool operator!=( const value &other ) const noexcept { return !( ( *this ) == other ); }
 
-	// Try to convert this value into object and
+	// Use value as JSON object and get property value under 'key'. If this value
+	// is not an object or 'key' is not found, null value is always returned.
 	value operator[]( std::string_view key ) const noexcept;
 
+	// Use value as JSON array and get item at 'index'. If this value is not
+	// an array or index is out of bounds, null value is returned.
 	value operator[]( size_t index ) const noexcept;
-
-	// Returns vector of values filtered with specified pattern (see README.md or json5_filter.inl)
-	std::vector<value> filter( std::string_view pattern ) const noexcept;
-
-	// Filter values with specified pattern through custom callback
-	template <typename Func> void filter( std::string_view pattern, Func &&func ) const noexcept;
 
 	// Get value payload (lower 48bits of _data) converted to type 'T'
 	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
@@ -166,17 +137,137 @@ protected:
 	friend builder;
 };
 
-} // namespace json5
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "json5_views.inl"
-#include "json5_filter.inl"
-#include "json5_document.inl"
-#include "json5_builder.inl"
-#include "json5_reader.inl"
-#include "json5_output.inl"
-#include "json5_reflect.inl"
+/*
 
-namespace json5 {
+json5::document
+
+*/
+class document final : public value
+{
+public:
+	// Construct empty document
+	document() = default;
+
+	// Construct a document copy
+	document( const document &copy ) { assign_copy( copy ); }
+
+	// Construct a document from r-value
+	document( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); }
+
+	// Copy data from another document (does a deep copy)
+	document &operator=( const document &copy ) { assign_copy( copy ); return *this; }
+
+	// Assign data from r-value (does a swap)
+	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); return *this; }
+
+private:
+	void assign_copy( const document &copy );
+	void assign_rvalue( document &&rValue ) noexcept;
+	void assign_root( value root ) noexcept;
+
+	std::string _strings;
+	std::vector<value> _values;
+
+	friend value;
+	friend builder;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+
+json5::object_view
+
+*/
+class object_view final
+{
+public:
+	// Construct an empty object view
+	object_view() noexcept = default;
+
+	// Construct object view over a value. If the provided value does not reference a JSON object,
+	// this object_view will be created empty
+	object_view( const value &v ) noexcept
+		: _pair( v.is_object() ? ( v.payload<const value*>() + 1 ) : nullptr )
+		, _count( _pair ? ( _pair[-1].get<size_t>() / 2 ) : 0 )
+	{ }
+
+	using key_value_pair = std::pair<const char *, value>;
+
+	class iterator final
+	{
+	public:
+		iterator( const value *p = nullptr ) noexcept : _pair( p ) { }
+		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
+		iterator &operator++() noexcept { _pair += 2; return *this; }
+		key_value_pair operator*() const noexcept { return key_value_pair( _pair[0].get_c_str(), _pair[1] ); }
+
+	private:
+		const value *_pair = nullptr;
+	};
+
+	// Get an iterator to the beginning of the object (first key-value pair)
+	iterator begin() const noexcept { return iterator( _pair ); }
+
+	// Get an iterator to the end of the object (past the last key-value pair)
+	iterator end() const noexcept { return iterator( _pair + _count * 2 ); }
+
+	// Find property value with 'key'. Returns end iterator, when not found.
+	iterator find( std::string_view key ) const noexcept;
+
+	// Get number of key-value pairs
+	size_t size() const noexcept { return _count; }
+
+	bool empty() const noexcept { return size() == 0; }
+	value operator[]( std::string_view key ) const noexcept;
+
+	bool operator==( const object_view &other ) const noexcept;
+	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
+
+private:
+	const value *_pair = nullptr;
+	size_t _count = 0;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+
+json5::array_view
+
+*/
+class array_view final
+{
+public:
+	// Construct an empty array view
+	array_view() noexcept = default;
+
+	// Construct array view over a value. If the provided value does not reference a JSON array,
+	// this array_view will be created empty
+	array_view( const value &v ) noexcept
+		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
+		, _count( _value ? _value[-1].get<size_t>() : 0 )
+	{ }
+
+	using iterator = const value*;
+
+	iterator begin() const noexcept { return _value; }
+	iterator end() const noexcept { return _value + _count; }
+	size_t size() const noexcept { return _count; }
+	bool empty() const noexcept { return _count == 0; }
+	value operator[]( size_t index ) const noexcept;
+
+	bool operator==( const array_view &other ) const noexcept;
+	bool operator!=( const array_view &other ) const noexcept { return !( ( *this ) == other ); }
+
+private:
+	const value *_value = nullptr;
+	size_t _count = 0;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
 inline value::value( value_type t, uint64_t data )
@@ -269,19 +360,6 @@ inline value value::operator[]( size_t index ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::vector<value> value::filter( std::string_view pattern ) const noexcept
-{
-	return detail::filter( *this, pattern );
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-template <typename Func>
-inline void value::filter( std::string_view pattern, Func &&func ) const noexcept
-{
-	detail::filter( *this, pattern, std::forward<Func>( func ) );
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline void value::relink( const class document *prevDoc, const class document &doc ) noexcept
 {
 	if ( is_string() )
@@ -301,68 +379,118 @@ inline void value::relink( const class document *prevDoc, const class document &
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const error &err )
+inline void document::assign_copy( const document &copy )
 {
-	os << error::type_string[err.type] << " at " << err.line << ":" << err.column;
+	_data = copy._data;
+	_strings = copy._strings;
+	_values = copy._values;
+
+	for ( auto &v : _values )
+		v.relink( &copy, *this );
+
+	relink( &copy, *this );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string( const error &err )
+inline void document::assign_rvalue( document &&rValue ) noexcept
 {
-	std::ostringstream os;
-	to_stream( os, err );
-	return os.str();
+	_data = std::move( rValue._data );
+	_strings = std::move( rValue._strings );
+	_values = std::move( rValue._values );
+
+	for ( auto &v : _values )
+		v.relink( &rValue, *this );
+
+	for ( auto &v : rValue._values )
+		v.relink( this, rValue );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const document &doc, const writer_params &wp )
+inline void document::assign_root( value root ) noexcept
 {
-	detail::to_stream( os, doc, wp, 0 );
+	_data = root._data;
+
+	for ( auto &v : _values )
+		v.relink( nullptr, *this );
+
+	relink( nullptr, *this );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string( std::string &str, const document &doc, const writer_params &wp )
+inline object_view::iterator object_view::find( std::string_view key ) const noexcept
 {
-	std::ostringstream os;
-	to_stream( os, doc, wp );
-	str = os.str();
+	if ( !key.empty() )
+	{
+		for ( auto iter = begin(); iter != end(); ++iter )
+			if ( key == ( *iter ).first )
+				return iter;
+	}
+
+	return end();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string( const document &doc, const writer_params &wp )
+inline value object_view::operator[]( std::string_view key ) const noexcept
 {
-	std::string result;
-	to_string( result, doc, wp );
+	const auto iter = find( key );
+	return ( iter != end() ) ? ( *iter ).second : value();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline bool object_view::operator==( const object_view &other ) const noexcept
+{
+	if ( size() != other.size() )
+		return false;
+
+	if ( empty() )
+		return true;
+
+	static constexpr size_t stack_pair_count = 256;
+	key_value_pair tempPairs1[stack_pair_count];
+	key_value_pair tempPairs2[stack_pair_count];
+	key_value_pair *pairs1 = _count <= stack_pair_count ? tempPairs1 : new key_value_pair[_count];
+	key_value_pair *pairs2 = _count <= stack_pair_count ? tempPairs2 : new key_value_pair[_count];
+	{ size_t i = 0; for ( const auto kvp : *this ) pairs1[i++] = kvp; }
+	{ size_t i = 0; for ( const auto kvp : other ) pairs2[i++] = kvp; }
+
+	const auto comp = []( const key_value_pair & a, const key_value_pair & b ) noexcept -> bool
+	{ return strcmp( a.first, b.first ) < 0; };
+
+	std::sort( pairs1, pairs1 + _count, comp );
+	std::sort( pairs2, pairs2 + _count, comp );
+
+	bool result = true;
+	for ( size_t i = 0; i < _count; ++i )
+	{
+		if ( strcmp( pairs1[i].first, pairs2[i].first ) || pairs1[i].second != pairs2[i].second )
+		{
+			result = false;
+			break;
+		}
+	}
+
+	if ( _count > stack_pair_count ) { delete[] pairs1; delete[] pairs2; }
 	return result;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool to_file( const std::string &fileName, const document &doc, const writer_params &wp )
+inline value array_view::operator[]( size_t index ) const noexcept
 {
-	std::ofstream ofs( fileName );
-	to_stream( ofs, doc, wp );
+	return ( index < _count ) ? _value[index] : value();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline bool array_view::operator==( const array_view &other ) const noexcept
+{
+	if ( size() != other.size() )
+		return false;
+
+	auto iter = begin();
+	for ( const auto &v : other )
+		if ( *iter++ != v )
+			return false;
+
 	return true;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error from_stream( std::istream &is, document &doc )
-{
-	detail::reader r{ doc, is };
-	return r.parse();
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error from_string( const std::string &str, document &doc )
-{
-	std::istringstream is( str );
-	return from_stream( is, doc );
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error from_file( const std::string &fileName, document &doc )
-{
-	std::ifstream ifs( fileName );
-	return from_stream( ifs, doc );
 }
 
 } // namespace json5

@@ -162,6 +162,7 @@ inline value &builder::operator[]( detail::string_offset keyOffset )
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::reset() noexcept
 {
+	_doc._data = value::type_null;
 	_doc._values.clear();
 	_doc._strings.clear();
 	_doc._strings.push_back( 0 );

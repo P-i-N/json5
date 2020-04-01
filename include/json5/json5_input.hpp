@@ -1,31 +1,44 @@
 #pragma once
 
-#include "json5.hpp"
+#include "json5_builder.hpp"
 
 #include <charconv>
+#include <fstream>
+#include <sstream>
 
-namespace json5::detail {
+namespace json5 {
 
-enum class token_type
-{
-	unknown, identifier, string, number, colon, comma,
-	object_begin, object_end, array_begin, array_end,
-	literal_true, literal_false, literal_null
-};
+// Parse json5::document from stream
+error from_stream( std::istream &is, document &doc );
+
+// Parse json5::document from string
+error from_string( const std::string &str, document &doc );
+
+// Parse json5::document from file
+error from_file( const std::string &fileName, document &doc );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class reader final : builder
+class parser final : builder
 {
 public:
-	reader( document &doc, std::istream &is ) : builder( doc ), _is( is ) { }
-
-	char next();
-	char peek() { return _is.peek(); }
-	bool eof() const { return _is.eof(); }
-	error make_error( int type ) const noexcept { return error{ type, _line, _column }; }
+	parser( document &doc, detail::char_source &chars ) : builder( doc ), _chars( chars ) { }
 
 	error parse();
+
+private:
+	char next() { return _chars.next(); }
+	char peek() { return _chars.peek(); }
+	bool eof() const { return _chars.eof(); }
+	error make_error( int type ) const noexcept { return _chars.make_error( type ); }
+
+	enum class token_type
+	{
+		unknown, identifier, string, number, colon, comma,
+		object_begin, object_end, array_begin, array_end,
+		literal_true, literal_false, literal_null
+	};
+
 	error parse_value( value &result );
 	error parse_object();
 	error parse_array();
@@ -35,29 +48,44 @@ public:
 	error parse_identifier( detail::string_offset &result );
 	error parse_literal( token_type &result );
 
-private:
-	std::istream &_is;
-	int _line = 1;
-	int _column = 1;
+	detail::char_source &_chars;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//---------------------------------------------------------------------------------------------------------------------
-inline char reader::next()
+namespace detail {
+
+class stl_istream : public char_source
 {
-	if ( _is.peek() == '\n' )
+public:
+	stl_istream( std::istream &is ) : _is( is ) { }
+
+	char next() override
 	{
-		_column = 0;
-		++_line;
+		if ( _is.peek() == '\n' )
+		{
+			_column = 0;
+			++_line;
+		}
+
+		++_column;
+		return _is.get();
 	}
 
-	++_column;
-	return _is.get();
-}
+	char peek() override { return _is.peek(); }
+
+	bool eof() const override { return _is.eof(); }
+
+protected:
+	std::istream &_is;
+};
+
+} // namespace detail
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse()
+inline error parser::parse()
 {
 	reset();
 
@@ -71,7 +99,7 @@ inline error reader::parse()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_value( value &result )
+inline error parser::parse_value( value &result )
 {
 	token_type tt = token_type::unknown;
 	if ( auto err = peek_next_token( tt ) )
@@ -145,7 +173,7 @@ inline error reader::parse_value( value &result )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_object()
+inline error parser::parse_object()
 {
 	next(); // Consume '{'
 
@@ -207,7 +235,7 @@ inline error reader::parse_object()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_array()
+inline error parser::parse_array()
 {
 	next(); // Consume '['
 
@@ -243,7 +271,7 @@ inline error reader::parse_array()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::peek_next_token( token_type &result )
+inline error parser::peek_next_token( token_type &result )
 {
 	enum class comment_type { none, line, block } parsingComment = comment_type::none;
 
@@ -316,7 +344,7 @@ inline error reader::peek_next_token( token_type &result )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_number( double &result )
+inline error parser::parse_number( double &result )
 {
 	char buff[256] = { };
 	size_t length = 0;
@@ -339,7 +367,7 @@ inline error reader::parse_number( double &result )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_string( detail::string_offset &result )
+inline error parser::parse_string( detail::string_offset &result )
 {
 	static constexpr char *hexChars = "0123456789abcdefABCDEF";
 
@@ -405,7 +433,7 @@ inline error reader::parse_string( detail::string_offset &result )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_identifier( detail::string_offset &result )
+inline error parser::parse_identifier( detail::string_offset &result )
 {
 	result = string_buffer_offset();
 
@@ -436,7 +464,7 @@ inline error reader::parse_identifier( detail::string_offset &result )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error reader::parse_literal( token_type &result )
+inline error parser::parse_literal( token_type &result )
 {
 	char ch = peek();
 
@@ -471,4 +499,27 @@ inline error reader::parse_literal( token_type &result )
 	return make_error( error::invalid_literal );
 }
 
-} // namespace json5::detail
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error from_stream( std::istream &is, document &doc )
+{
+	parser r( doc, detail::stl_istream( is ) );
+	return r.parse();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error from_string( const std::string &str, document &doc )
+{
+	std::istringstream is( str );
+	return from_stream( is, doc );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline error from_file( const std::string &fileName, document &doc )
+{
+	std::ifstream ifs( fileName );
+	return from_stream( ifs, doc );
+}
+
+} // namespace json5

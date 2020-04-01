@@ -1,4 +1,7 @@
 #include <json5/json5.hpp>
+#include <json5/json5_input.hpp>
+#include <json5/json5_output.hpp>
+#include <json5/json5_reflect.hpp>
 
 #include <chrono>
 #include <iostream>

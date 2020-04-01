@@ -4,7 +4,7 @@
 
 #include <functional>
 
-namespace json5::detail {
+namespace json5 {
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename Func>
@@ -98,4 +98,4 @@ inline std::vector<value> filter( const value &in, std::string_view pattern )
 	return result;
 }
 
-} // namespace json5::detail
+} // namespace json5

@@ -1,9 +1,10 @@
 #pragma once
 
-#include "json5.hpp"
+#include "json5_builder.hpp"
 
 #include <array>
 #include <map>
+#include <unordered_map>
 
 namespace json5 {
 
