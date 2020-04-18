@@ -8,6 +8,32 @@
 
 namespace json5 {
 
+//
+template <typename T> void to_document( document &doc, const T &in, const writer_params &wp = writer_params() );
+
+//
+template <typename T> void to_stream( std::ostream &os, const T &in, const writer_params &wp = writer_params() );
+
+//
+template <typename T> void to_string( std::string &str, const T &in, const writer_params &wp = writer_params() );
+
+//
+template <typename T> std::string to_string( const T &in, const writer_params &wp = writer_params() );
+
+//
+template <typename T> bool to_file( const std::string &fileName, const T &in, const writer_params &wp = writer_params() );
+
+//
+template <typename T> error from_document( const document &doc, T &out );
+
+//
+template <typename T> error from_string( const std::string &str, T &out );
+
+//
+template <typename T> error from_file( const std::string &fileName, T &out );
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 namespace detail {
 
 class writer final : public builder
@@ -411,7 +437,7 @@ inline error read( const json5::array_view &arr, Head &out, Tail &... tail )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_document( document &doc, const T &in, const writer_params &wp = writer_params() )
+inline void to_document( document &doc, const T &in, const writer_params &wp )
 {
 	detail::writer w( doc, wp );
 	detail::write( w, in );
@@ -419,7 +445,7 @@ inline void to_document( document &doc, const T &in, const writer_params &wp = w
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_stream( std::ostream &os, const T &in, const writer_params &wp = writer_params() )
+inline void to_stream( std::ostream &os, const T &in, const writer_params &wp )
 {
 	document doc;
 	to_document( doc, in, wp );
@@ -428,7 +454,7 @@ inline void to_stream( std::ostream &os, const T &in, const writer_params &wp = 
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_string( std::string &str, const T &in, const writer_params &wp = writer_params() )
+inline void to_string( std::string &str, const T &in, const writer_params &wp )
 {
 	document doc;
 	to_document( doc, in );
@@ -437,7 +463,7 @@ inline void to_string( std::string &str, const T &in, const writer_params &wp = 
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline std::string to_string( const T &in, const writer_params &wp = writer_params() )
+inline std::string to_string( const T &in, const writer_params &wp )
 {
 	std::string result;
 	to_string( result, in, wp );
@@ -446,7 +472,7 @@ inline std::string to_string( const T &in, const writer_params &wp = writer_para
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline bool to_file( const std::string &fileName, const T &in, const writer_params &wp = writer_params() )
+inline bool to_file( const std::string &fileName, const T &in, const writer_params &wp )
 {
 	std::ofstream ofs( fileName );
 	to_stream( ofs, in, wp );

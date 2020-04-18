@@ -188,12 +188,13 @@ public:
 	object_view() noexcept = default;
 
 	// Construct object view over a value. If the provided value does not reference a JSON object,
-	// this object_view will be created empty
+	// this object_view will be created empty (and invalid)
 	object_view( const value &v ) noexcept
 		: _pair( v.is_object() ? ( v.payload<const value*>() + 1 ) : nullptr )
 		, _count( _pair ? ( _pair[-1].get<size_t>() / 2 ) : 0 )
 	{ }
 
+	// Checks, if object view was constructed from valid value
 	bool is_valid() const noexcept { return _pair != nullptr; }
 
 	using key_value_pair = std::pair<const char *, value>;
@@ -247,12 +248,13 @@ public:
 	array_view() noexcept = default;
 
 	// Construct array view over a value. If the provided value does not reference a JSON array,
-	// this array_view will be created empty
+	// this array_view will be created empty (and invalid)
 	array_view( const value &v ) noexcept
 		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
 		, _count( _value ? _value[-1].get<size_t>() : 0 )
 	{ }
 
+	// Checks, if array view was constructed from valid value
 	bool is_valid() const noexcept { return _value != nullptr; }
 
 	using iterator = const value*;

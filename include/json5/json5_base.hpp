@@ -3,10 +3,13 @@
 #include <tuple>
 
 /*
+	Generates class serialization helper for specified type:
 
-Generates class wrapper definition for specified type. This macro MUST BE placed
-in global namespace.
+	namespace foo {
+		struct Bar { int x; float y; bool z; };
+	}
 
+	JSON5_CLASS(foo::Bar, x, y, z)
 */
 #define JSON5_CLASS(_Name, ...) \
 	template <> struct json5::detail::class_wrapper<_Name> { \
@@ -19,6 +22,17 @@ in global namespace.
 		} \
 	};
 
+/*
+	Generates class serialization helper for specified type with inheritance:
+
+	namespace foo {
+		struct Base { std::string name; };
+		struct Bar : Base { int x; float y; bool z; };
+	}
+
+	JSON5_CLASS(foo::Base, name)
+	JSON5_CLASS_INHERIT(foo::Bar, foo::Base, x, y, z)
+*/
 #define JSON5_CLASS_INHERIT(_Name, _Base, ...) \
 	template <> struct json5::detail::class_wrapper<_Name> { \
 		static constexpr char* names = #__VA_ARGS__; \
@@ -34,12 +48,37 @@ in global namespace.
 		} \
 	};
 
+/*
+	Generates members serialization helper inside class:
+
+	namespace foo {
+		struct Bar {
+			int x; float y; bool z;
+			JSON5_MEMBERS(x, y, z)
+		};
+	}
+*/
 #define JSON5_MEMBERS(...) \
 	inline auto make_named_tuple() noexcept { \
 		return std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ )); } \
 	inline auto make_named_tuple() const noexcept { \
 		return std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ )); }
 
+/*
+	Generates members serialzation helper inside class with inheritance:
+
+	namespace foo {
+		struct Base {
+			std::string name;
+			JSON5_MEMBERS(name)
+		};
+
+		struct Bar : Base {
+			int x; float y; bool z;
+			JSON5_MEMBERS_INHERIT(Base, x, y, z)
+		};
+	}
+*/
 #define JSON5_MEMBERS_INHERIT(_Base, ...) \
 	inline auto make_named_tuple() noexcept { \
 		return std::tuple_cat( \
@@ -50,6 +89,15 @@ in global namespace.
 		                       json5::detail::class_wrapper<_Base>::make_named_tuple(*this), \
 		                       std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
 
+/*
+	Generates enum wrapper:
+
+	enum class MyEnum {
+		One, Two, Three
+	};
+
+	JSON5_ENUM(MyEnum, One, Two, Three)
+*/
 #define JSON5_ENUM(_Name, ...) \
 	template <> struct json5::detail::enum_table<_Name> : std::true_type { \
 		using enum _Name; \
@@ -163,6 +211,8 @@ protected:
 } // namespace json5::detail
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/* Here be dragons... */
 
 #define _JSON5_EXPAND(...) __VA_ARGS__
 #define _JSON5_JOIN(X, Y) _JSON5_JOIN2(X, Y)

@@ -6,9 +6,17 @@
 
 namespace json5 {
 
+//
+template <typename Func> void filter( const json5::value &in, std::string_view pattern, Func &&func );
+
+//
+std::vector<json5::value> filter( const json5::value &in, std::string_view pattern );
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //---------------------------------------------------------------------------------------------------------------------
 template <typename Func>
-inline void filter( const value &in, std::string_view pattern, Func &&func )
+inline void filter( const json5::value &in, std::string_view pattern, Func &&func )
 {
 	if ( pattern.empty() )
 	{
@@ -91,7 +99,7 @@ inline void filter( const value &in, std::string_view pattern, Func &&func )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::vector<value> filter( const value &in, std::string_view pattern )
+inline std::vector<json5::value> filter( const json5::value &in, std::string_view pattern )
 {
 	std::vector<value> result;
 	filter( in, pattern, [&result]( const value & v ) { result.push_back( v ); } );
