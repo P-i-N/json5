@@ -71,16 +71,12 @@ public:
 		return is_number() ? T( _double ) : defaultValue;
 	}
 
-	// Try to get stored number as type 'T'. Returns false, if this value is not a number
-	// and sets 'out' refernce to 'defaultValue'.
+	// Try to get stored number as type 'T'. Returns false, if this value is not a number.
 	template <typename T>
-	bool try_get( T &out, T defaultValue = 0 ) const noexcept
+	bool try_get( T &out ) const noexcept
 	{
 		if ( !is_number() )
-		{
-			out = defaultValue;
 			return false;
-		}
 
 		out = T( _double );
 		return true;
