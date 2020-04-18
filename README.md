@@ -72,36 +72,19 @@ JSON5_CLASS(Triangle, a, b, c)
 namespace json5::detail {
 
 // Write vec3 as JSON array of 3 numbers
-inline json5::value write(builder& b, const vec3 &in)
+inline json5::value write( writer &w, const vec3 &in )
 {
-	b.push_array();
-	b += write(b, in.x);
-	b += write(b, in.y);
-	b += write(b, in.z);
-	return b.pop();
+	w.push_array();
+	w += write( w, in.x );
+	w += write( w, in.y );
+	w += write( w, in.z );
+	return w.pop();
 }
 
 // Read vec3 from JSON array
-inline error read(const json5::value& in, vec3& out)
+inline error read( const json5::value &in, vec3 &out )
 {
-	if (!in.is_array())
-		return { error::array_expected };
-
-	auto arr = json5::array_view(in);
-
-	if (arr.size() != 3)
-		return { error::wrong_array_size };
-
-	if (auto err = read(arr[0], out.x))
-		return err;
-
-	if (auto err = read(arr[1], out.y))
-		return err;
-
-	if (auto err = read(arr[2], out.z))
-		return err;
-
-	return { error::none };
+	return read( json5::array_view( in ), out.x, out.y, out.z );
 }
 
 } // namespace json5::detail
