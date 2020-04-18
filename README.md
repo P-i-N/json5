@@ -1,9 +1,10 @@
-# json5
+# `json5`
 **`json5`** is a small header only C++ library for parsing [JSON](https://en.wikipedia.org/wiki/JSON) or [**JSON5**](https://json5.org/) data. It also comes with a simple reflection system for easy serialization and deserialization of C++ structs.
 
-## Example
+### Quick Example:
 ```cpp
-#include <json5/json5.hpp>
+#include <json5/json5_input.hpp>
+#include <json5/json5_output.hpp>
 
 struct Settings
 {
@@ -14,7 +15,7 @@ struct Settings
 	bool fullscreen = false;
 	std::string renderer = "";
 
-	JSON5_REFLECT(x, y, width, height, fullscreen, renderer)
+	JSON5_MEMBERS(x, y, width, height, fullscreen, renderer)
 };
 
 Settings s;
@@ -26,101 +27,36 @@ json5::from_file("settings.json", s);
 json5::to_file("settings.json", s);
 ```
 
-## Overview
+## `json5.hpp`
 
-### `json5::document`
-This is the root data structure for all library operations. It is an **immutable** container and holds finished parsed representation of your JSON data. You can initialize `json5::document` either by using `json5::builder` (see below) or by using `json5::from_`* functions.
+## `json5_input.hpp`
+Provides functions to load `json5::document` from string, stream or file.
 
-### Building
+## `json5_output.hpp`
+Provides functions to convert `json5::document` into string, stream or file.
 
-### `json5::builder`
-**TBD**
+## `json5_builder.hpp`
 
-### Filtering
-**`json5::document`** 
+## `json5_reflect.hpp`
 
-### Error reporting
-
-Library does not rely on exceptions. Instead, most parsing functions return `json5::error` structure containing error type and location. The simplest, most convenient way to check for parsing error is to do a check within `if` condition:
-```cpp
-if (auto err = json5::from_file("settings.json", s))
-{
-	// Might print something like: invalid escape sequence at 145:8
-	std::cerr << json5::to_string(err) << std::endl;
-}
-```
-
-### Library data types
-**TBD**
-
-### `json5::value`
-
-### `json5::object_view`
-
-### `json5::array_view`
-
-## Reflection API
-
-### `JSON5_REFLECT(...)`
-### `JSON5_ENUM(...)`
-**TBD**
-
-### Basic supported types
+### Basic supported types:
 - `bool`
 - `int`, `float`, `double`
 - `std::string`
 - `std::vector`, `std::map`, `std::unordered_map`, `std::array`
 - `C array`
 
-## Additional examples
-- [Loading documents](#loading-documents)
-	- [Read from file](#read-from-file)
-	- [Read from string](#read-from-string)
-	- [Read from stream](#read-from-stream)
-- [Saving documents](#saving-documents)
-	- [Write to file](#write-to-file)
-	- [Write to string](#write-to-string)
-	- [Write to stream](#write-to-stream)
-- [Reflection](#reflection)
-	- [Serialize custom type](#serialize-custom-type)
-	- [Serialize enum](#serialize-enum)
+## `json5_base.hpp`
 
-### Loading documents
+## `json5_filter.hpp`
 
-##### Read from file
-```cpp
-json5::document doc;
-if (auto err = json5::from_file("myfile.json", doc))
-	std::cerr << json5::to_string(err) << std::endl;
-```
+# FAQ
 
-##### Read from string
-```cpp
-json5::document doc;
-if (auto err = json5::from_string("{ x: 1, y: true, z: 'Hello!' }", doc))
-	std::cerr << json5::to_string(err) << std::endl;
-```
 
-##### Read from stream
-```cpp
-std::istream myInputStream...;
 
-json5::document doc;
-if (auto err = json5::from_stream(myInputStream, doc))
-	std::cerr << json5::to_string(err) << std::endl;
-```
+# Additional examples
 
-### Saving documents
-
-##### Write to file
-
-##### Write to string
-
-##### Write to stream
-
-### Reflection
-
-##### Serialize custom type
+### Serialize custom type:
 ```cpp
 // Let's have a 3D vector struct:
 struct vec3 { float x, y, z; };
@@ -129,9 +65,9 @@ struct vec3 { float x, y, z; };
 struct Triangle
 {
 	vec3 a, b, c;
-
-	JSON5_REFLECT(a, b, c)
 };
+
+JSON5_CLASS(Triangle, a, b, c)
 
 namespace json5::detail {
 
@@ -151,7 +87,7 @@ inline error read(const json5::value& in, vec3& out)
 	if (!in.is_array())
 		return { error::array_expected };
 
-	auto arr = json5::array(in);
+	auto arr = json5::array_view(in);
 
 	if (arr.size() != 3)
 		return { error::wrong_array_size };
@@ -171,7 +107,7 @@ inline error read(const json5::value& in, vec3& out)
 } // namespace json5::detail
 ```
 
-##### Serialize enum
+### Serialize enum:
 ```cpp
 enum class MyEnum
 {
