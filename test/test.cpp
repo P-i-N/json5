@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iostream>
 #include <map>
+#include <type_traits>
 
 //---------------------------------------------------------------------------------------------------------------------
 struct Stopwatch
@@ -41,6 +42,20 @@ enum class MyEnum
 };
 
 JSON5_ENUM( MyEnum, Zero, First, Second, Third )
+
+struct BarBase
+{
+	std::string name;
+};
+
+JSON5_CLASS( BarBase, name )
+
+struct Bar : BarBase
+{
+	int age = 0;
+};
+
+JSON5_CLASS_INHERIT( Bar, BarBase, age )
 
 //---------------------------------------------------------------------------------------------------------------------
 int main( int argc, char *argv[] )
@@ -142,15 +157,6 @@ int main( int argc, char *argv[] )
 
 	/// Reflection test
 	{
-		struct Bar
-		{
-			std::string name;
-			int age = 0;
-
-			JSON5_REFLECT( name, age )
-			bool operator==( const Bar &o ) const noexcept { return make_tuple() == o.make_tuple(); }
-		};
-
 		struct Foo
 		{
 			int x = 123;
@@ -165,8 +171,8 @@ int main( int argc, char *argv[] )
 			Bar bar = { "Somebody Unknown", 500 };
 			MyEnum e = MyEnum::Second;
 
-			JSON5_REFLECT( x, y, z, text, numbers, barMap, position, bar, e )
-			bool operator==( const Foo &o ) const noexcept { return make_tuple() == o.make_tuple(); }
+			JSON5_MEMBERS( x, y, z, text, numbers, barMap, position, bar, e )
+			//bool operator==( const Foo &o ) const noexcept { return make_tuple() == o.make_tuple(); }
 		};
 
 		Foo foo1;
@@ -175,10 +181,12 @@ int main( int argc, char *argv[] )
 		Foo foo2;
 		json5::from_file( "Foo.json5", foo2 );
 
+		/*
 		if ( foo1 == foo2 )
 			std::cout << "foo1 == foo2" << std::endl;
 		else
 			std::cout << "foo1 != foo2" << std::endl;
+		*/
 	}
 
 	return 0;

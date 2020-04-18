@@ -116,13 +116,13 @@ inline json5::value write_enum( writer &w, T in )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-template <size_t I = 1, typename... Types>
-inline void write( writer &w, const std::tuple<Types...> &t )
+template <size_t Index = 0, typename... Types>
+inline void write_tuple( writer &w, const char *names, const std::tuple<Types...> &t )
 {
-	const auto &in = std::get<I>( t );
+	const auto &in = std::get<Index>( t );
 	using Type = std::remove_const_t<std::remove_reference_t<decltype( in )>>;
 
-	if ( auto name = get_name_slice( std::get<0>( t ), I - 1 ); !name.empty() )
+	if ( auto name = get_name_slice( names, Index ); !name.empty() )
 	{
 		if constexpr ( std::is_enum_v<Type> )
 		{
@@ -135,8 +135,18 @@ inline void write( writer &w, const std::tuple<Types...> &t )
 			w[name] = write( w, in );
 	}
 
-	if constexpr ( I + 1 != sizeof...( Types ) )
-		write < I + 1 > ( w, t );
+	if constexpr ( Index + 1 != sizeof...( Types ) )
+		write_tuple < Index + 1 > ( w, names, t );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <size_t Index = 0, typename... Types>
+inline void write_named_tuple( writer &w, const std::tuple<Types...> &t )
+{
+	write_tuple( w, std::get<Index>( t ), std::get < Index + 1 > ( t ) );
+
+	if constexpr ( Index + 2 != sizeof...( Types ) )
+		write_named_tuple < Index + 2 > ( w, t );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -144,7 +154,7 @@ template <typename T>
 inline json5::value write( writer &w, const T &in )
 {
 	w.push_object();
-	write( w, in.make_named_tuple() );
+	write_named_tuple( w, class_wrapper<T>::make_named_tuple( in ) );
 	return w.pop();
 }
 
@@ -313,13 +323,13 @@ inline error read_enum( const json5::value &in, T &out )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-template <size_t I = 1, typename... Types>
-inline error read( const json5::object_view &obj, std::tuple<Types...> &t )
+template <size_t Index = 0, typename... Types>
+inline error read_tuple( const json5::object_view &obj, const char *names, std::tuple<Types...> &t )
 {
-	auto &out = std::get<I>( t );
+	auto &out = std::get<Index>( t );
 	using Type = std::remove_reference_t<decltype( out )>;
 
-	auto name = get_name_slice( std::get<0>( t ), I - 1 );
+	auto name = get_name_slice( names, Index );
 
 	auto iter = obj.find( name );
 	if ( iter != obj.end() )
@@ -347,13 +357,20 @@ inline error read( const json5::object_view &obj, std::tuple<Types...> &t )
 		}
 	}
 
-	if constexpr ( I + 1 != sizeof...( Types ) )
+	if constexpr ( Index + 1 != sizeof...( Types ) )
 	{
-		if ( auto err = read < I + 1 > ( obj, t ) )
+		if ( auto err = read_tuple < Index + 1 > ( obj, names, t ) )
 			return err;
 	}
 
 	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+template <size_t Index = 0, typename Tuple>
+inline error read_named_tuple( const json5::object_view &obj, Tuple &t )
+{
+	return read_tuple( obj, std::get<Index>( t ), std::get < Index + 1 > ( t ) );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -363,7 +380,7 @@ inline error read( const json5::value &in, T &out )
 	if ( !in.is_object() )
 		return { error::object_expected };
 
-	return read( json5::object_view( in ), out.make_named_tuple() );
+	return read_named_tuple( json5::object_view( in ), class_wrapper<T>::make_named_tuple( out ) );
 }
 
 } // namespace detail
