@@ -31,4 +31,7 @@
 			</ArrayItems>
 		</Expand>
 	</Type>
+  <Type Name="json5::error">
+    <DisplayString>{ type_string[type],s } at line { line }, column { column }</DisplayString>
+  </Type>
 </AutoVisualizer>
