@@ -383,6 +383,28 @@ inline error read( const json5::value &in, T &out )
 	return read_named_tuple( json5::object_view( in ), class_wrapper<T>::make_named_tuple( out ) );
 }
 
+//---------------------------------------------------------------------------------------------------------------------
+template <size_t Index = 0, typename Head, typename... Tail>
+inline error read( const json5::array_view &arr, Head &out, Tail &... tail )
+{
+	if constexpr ( Index == 0 )
+	{
+		if ( !arr.is_valid() )
+			return { error::array_expected };
+
+		if ( arr.size() != ( 1 + sizeof...( Tail ) ) )
+			return { error::wrong_array_size };
+	}
+
+	if ( auto err = read( arr[Index], out ) )
+		return err;
+
+	if constexpr ( sizeof...( Tail ) > 0 )
+		return read < Index + 1 > ( arr, tail... );
+
+	return { error::none };
+}
+
 } // namespace detail
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
