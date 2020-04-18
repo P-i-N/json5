@@ -194,6 +194,8 @@ public:
 		, _count( _pair ? ( _pair[-1].get<size_t>() / 2 ) : 0 )
 	{ }
 
+	bool is_valid() const noexcept { return _pair != nullptr; }
+
 	using key_value_pair = std::pair<const char *, value>;
 
 	class iterator final
@@ -250,6 +252,8 @@ public:
 		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
 		, _count( _value ? _value[-1].get<size_t>() : 0 )
 	{ }
+
+	bool is_valid() const noexcept { return _value != nullptr; }
 
 	using iterator = const value*;
 
