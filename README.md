@@ -28,6 +28,7 @@ json5::to_file("settings.json", s);
 ```
 
 ## `json5.hpp`
+TBD
 
 ## `json5_input.hpp`
 Provides functions to load `json5::document` from string, stream or file.
