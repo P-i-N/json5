@@ -13,7 +13,7 @@
 */
 #define JSON5_CLASS(_Name, ...) \
 	template <> struct json5::detail::class_wrapper<_Name> { \
-		static constexpr char* names = #__VA_ARGS__; \
+		static constexpr const char* names = #__VA_ARGS__; \
 		inline static auto make_named_tuple(_Name &out) noexcept { \
 			return std::tuple( names, std::tie( _JSON5_CONCAT( _JSON5_PREFIX_OUT, ( __VA_ARGS__ ) ) ) ); \
 		} \
@@ -35,16 +35,16 @@
 */
 #define JSON5_CLASS_INHERIT(_Name, _Base, ...) \
 	template <> struct json5::detail::class_wrapper<_Name> { \
-		static constexpr char* names = #__VA_ARGS__; \
+		static constexpr const char* names = #__VA_ARGS__; \
 		inline static auto make_named_tuple(_Name &out) noexcept { \
 			return std::tuple_cat( \
 			                       json5::detail::class_wrapper<_Base>::make_named_tuple(out), \
-			                       std::tuple(#__VA_ARGS__, std::tie( _JSON5_CONCAT(_JSON5_PREFIX_OUT, (__VA_ARGS__)) ))); \
+			                       std::tuple(names, std::tie( _JSON5_CONCAT(_JSON5_PREFIX_OUT, (__VA_ARGS__)) ))); \
 		} \
 		inline static auto make_named_tuple(const _Name &in) noexcept { \
 			return std::tuple_cat( \
 			                       json5::detail::class_wrapper<_Base>::make_named_tuple(in), \
-			                       std::tuple(#__VA_ARGS__, std::tie( _JSON5_CONCAT(_JSON5_PREFIX_IN, (__VA_ARGS__)) ))); \
+			                       std::tuple(names, std::tie( _JSON5_CONCAT(_JSON5_PREFIX_IN, (__VA_ARGS__)) ))); \
 		} \
 	};
 
@@ -60,9 +60,9 @@
 */
 #define JSON5_MEMBERS(...) \
 	inline auto make_named_tuple() noexcept { \
-		return std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ )); } \
+		return std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ )); } \
 	inline auto make_named_tuple() const noexcept { \
-		return std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ )); }
+		return std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ )); }
 
 /*
 	Generates members serialzation helper inside class with inheritance:
@@ -83,11 +83,11 @@
 	inline auto make_named_tuple() noexcept { \
 		return std::tuple_cat( \
 		                       json5::detail::class_wrapper<_Base>::make_named_tuple(*this), \
-		                       std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
+		                       std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
 	inline auto make_named_tuple() const noexcept { \
 		return std::tuple_cat( \
 		                       json5::detail::class_wrapper<_Base>::make_named_tuple(*this), \
-		                       std::tuple(#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
+		                       std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
 
 /*
 	Generates enum wrapper:
@@ -101,8 +101,8 @@
 #define JSON5_ENUM(_Name, ...) \
 	template <> struct json5::detail::enum_table<_Name> : std::true_type { \
 		using enum _Name; \
-		static constexpr char* names = #__VA_ARGS__; \
-		static constexpr _Name values[] = { __VA_ARGS__ }; };
+		static constexpr const char* names = #__VA_ARGS__; \
+		static constexpr const _Name values[] = { __VA_ARGS__ }; };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -136,7 +136,7 @@ struct error final
 		invalid_enum,       // invalid enum value or string (conversion failed)
 	};
 
-	static constexpr char *type_string[] =
+	static constexpr const char *type_string[] =
 	{
 		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
 		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
