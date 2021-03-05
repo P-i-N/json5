@@ -358,9 +358,9 @@ inline error parser::parse_number( double &result )
 			break;
 	}
 
-	auto convResult = std::from_chars( buff, buff + length, result );
-
-	if ( convResult.ec != std::errc() )
+	char *end = nullptr;
+	result = strtod(buff, &end);
+	if (buff == end)
 		return make_error( error::syntax_error );
 
 	return { error::none };
