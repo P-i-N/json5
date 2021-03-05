@@ -45,7 +45,7 @@ class writer final : public builder
 public:
 	writer( document &doc, const writer_params &wp ): builder( doc ), _params( wp ) { }
 
-	const writer_params &params() const noexcept { _params; }
+	const writer_params &params() const noexcept { return _params; }
 
 private:
 	writer_params _params;
