@@ -248,5 +248,5 @@ protected:
 #define _JSON5_CONCAT_15(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_14(_Prefix,_JSON5_TAIL _Args)
 #define _JSON5_CONCAT_16(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_15(_Prefix,_JSON5_TAIL _Args)
 
-#define _JSON5_PREFIX_IN(_X) _JSON5_JOIN(in., _X)
-#define _JSON5_PREFIX_OUT(_X) _JSON5_JOIN(out., _X)
+#define _JSON5_PREFIX_IN(_X) in. _X
+#define _JSON5_PREFIX_OUT(_X) out. _X
