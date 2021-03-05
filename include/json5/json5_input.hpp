@@ -520,6 +520,9 @@ inline error from_string( const std::string &str, document &doc )
 inline error from_file( const std::string &fileName, document &doc )
 {
 	std::ifstream ifs( fileName );
+	if (!ifs.is_open())
+		return error{ error::could_not_open, 0, 0 };
+
 	return from_stream( ifs, doc );
 }
 

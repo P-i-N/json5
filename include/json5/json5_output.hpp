@@ -208,6 +208,9 @@ inline std::string to_string( const document &doc, const writer_params &wp )
 inline bool to_file( const std::string &fileName, const document &doc, const writer_params &wp )
 {
 	std::ofstream ofs( fileName );
+	if (!ofs.is_open())
+		return false;
+
 	to_stream( ofs, doc, wp );
 	return true;
 }
