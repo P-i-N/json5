@@ -504,7 +504,8 @@ inline error parser::parse_literal( token_type &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error from_stream( std::istream &is, document &doc )
 {
-	parser r( doc, detail::stl_istream( is ) );
+	auto isWrapper = detail::stl_istream( is );
+	parser r( doc, isWrapper );
 	return r.parse();
 }
 

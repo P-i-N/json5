@@ -395,7 +395,8 @@ inline error read( const json5::value &in, T &out )
 	if ( !in.is_object() )
 		return { error::object_expected };
 
-	return read_named_tuple( json5::object_view( in ), class_wrapper<T>::make_named_tuple( out ) );
+	auto tuple = class_wrapper<T>::make_named_tuple( out );
+	return read_named_tuple( json5::object_view( in ), tuple );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
