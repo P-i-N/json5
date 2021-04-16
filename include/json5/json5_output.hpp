@@ -212,11 +212,21 @@ inline bool to_file( const std::string &fileName, const document &doc, const wri
 	return true;
 }
 
-
 //---------------------------------------------------------------------------------------------------------------------
 inline void to_stream( std::ostream &os, const error &err )
 {
-	os << error::type_string[err.type] << " at " << err.line << ":" << err.column;
+	switch ( err.type )
+	{
+		case error::none:
+			os << "none";
+			break;
+
+		default:
+			os << "unknown error";
+			break;
+	}
+
+	os << " at " << err.line << ":" << err.column;
 }
 
 //---------------------------------------------------------------------------------------------------------------------

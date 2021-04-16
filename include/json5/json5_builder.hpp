@@ -102,7 +102,7 @@ inline void builder::string_buffer_add_utf8( uint32_t ch )
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::push_object()
 {
-	auto v = value( value_type::object, 0ull );
+	auto v = value( value_type::object, nullptr );
 	_stack.emplace_back( v );
 	_counts.push_back( 0 );
 }
@@ -110,7 +110,7 @@ inline void builder::push_object()
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::push_array()
 {
-	auto v = value( value_type::array, 0ull );
+	auto v = value( value_type::array, nullptr );
 	_stack.emplace_back( v );
 	_counts.push_back( 0 );
 }

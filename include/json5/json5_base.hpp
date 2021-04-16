@@ -136,13 +136,15 @@ struct error final
 		invalid_enum,       // invalid enum value or string (conversion failed)
 	};
 
-	static constexpr char *type_string[] =
+	/*
+	static const char *type_string[] =
 	{
 		"none", "invalid root", "unexpected end", "syntax error", "invalid literal",
 		"invalid escape sequence", "comma expected", "colon expected", "boolean expected",
 		"number expected", "string expected", "object expected", "array expected",
 		"wrong array size", "invalid enum"
 	};
+	*/
 
 	int type = none;
 	int line = 0;

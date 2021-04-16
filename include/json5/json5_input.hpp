@@ -2,7 +2,13 @@
 
 #include "json5_builder.hpp"
 
-#include <charconv>
+#if __has_include(<xcharconv>)
+	#include <charconv>
+	#if !defined(_JSON5_HAS_CHARCONV)
+		#define _JSON5_HAS_CHARCONV
+	#endif
+#endif
+
 #include <fstream>
 #include <sstream>
 
@@ -358,10 +364,18 @@ inline error parser::parse_number( double &result )
 			break;
 	}
 
+#if defined(_JSON5_HAS_CHARCONV)
 	auto convResult = std::from_chars( buff, buff + length, result );
 
 	if ( convResult.ec != std::errc() )
 		return make_error( error::syntax_error );
+#else
+	char *buffEnd = nullptr;
+	result = strtod( buff, &buffEnd );
+
+	if ( result == 0.0 && buffEnd == buff )
+		return make_error( error::syntax_error );
+#endif
 
 	return { error::none };
 }
@@ -369,7 +383,7 @@ inline error parser::parse_number( double &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error parser::parse_string( detail::string_offset &result )
 {
-	static constexpr char *hexChars = "0123456789abcdefABCDEF";
+	static const char *hexChars = "0123456789abcdefABCDEF";
 
 	bool singleQuoted = peek() == '\'';
 	next(); // Consume '\'' or '"'
@@ -415,7 +429,17 @@ inline error parser::parse_string( detail::string_offset &result )
 						return make_error( error::invalid_escape_seq );
 
 				uint64_t unicodeChar = 0;
+
+#if defined(_JSON5_HAS_CHARCONV)
 				std::from_chars( code, code + 5, unicodeChar, 16 );
+#else
+				char *codeEnd = nullptr;
+				unicodeChar = strtoull( code, &codeEnd, 16 );
+
+				if ( !unicodeChar && codeEnd == code )
+					return make_error( error::invalid_escape_seq );
+#endif
+
 				string_buffer_add_utf8( uint32_t( unicodeChar ) );
 			}
 			else
@@ -504,7 +528,8 @@ inline error parser::parse_literal( token_type &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error from_stream( std::istream &is, document &doc )
 {
-	parser r( doc, detail::stl_istream( is ) );
+	detail::stl_istream src( is );
+	parser r( doc, src );
 	return r.parse();
 }
 
