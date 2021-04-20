@@ -33,8 +33,8 @@ public:
 	error parse();
 
 private:
-	char next() { return _chars.next(); }
-	char peek() { return _chars.peek(); }
+	int next() { return _chars.next(); }
+	int peek() { return _chars.peek(); }
 	bool eof() const { return _chars.eof(); }
 	error make_error( int type ) const noexcept { return _chars.make_error( type ); }
 
@@ -66,7 +66,7 @@ class stl_istream : public char_source
 public:
 	stl_istream( std::istream &is ) : _is( is ) { }
 
-	char next() override
+	int next() override
 	{
 		if ( _is.peek() == '\n' )
 		{
@@ -78,9 +78,9 @@ public:
 		return _is.get();
 	}
 
-	char peek() override { return _is.peek(); }
+	int peek() override { return _is.peek(); }
 
-	bool eof() const override { return _is.eof(); }
+	bool eof() const override { return _is.eof() || _is.fail(); }
 
 protected:
 	std::istream &_is;
@@ -283,13 +283,13 @@ inline error parser::peek_next_token( token_type &result )
 
 	while ( !eof() )
 	{
-		char ch = peek();
+		int ch = peek();
 		if ( ch == '\n' )
 		{
 			if ( parsingComment == comment_type::line )
 				parsingComment = comment_type::none;
 		}
-		else if ( parsingComment != comment_type::none || ch <= 32 )
+		else if ( parsingComment != comment_type::none || ( ch > 0 && ch <= 32 ) )
 		{
 			if ( parsingComment == comment_type::block && ch == '*' && next() ) // Consume '*'
 			{
@@ -359,8 +359,8 @@ inline error parser::parse_number( double &result )
 	{
 		buff[length++] = next();
 
-		char ch = peek();
-		if ( ch <= 32 || ch == ',' || ch == '}' || ch == ']' )
+		int ch = peek();
+		if ( ( ch > 0 && ch <= 32 ) || ch == ',' || ch == '}' || ch == ']' )
 			break;
 	}
 
@@ -392,7 +392,7 @@ inline error parser::parse_string( detail::string_offset &result )
 
 	while ( !eof() )
 	{
-		char ch = peek();
+		int ch = peek();
 		if ( ( ( singleQuoted && ch == '\'' ) || ( !singleQuoted && ch == '"' ) ) && next() ) // Consume '\'' or '"'
 			break;
 		else if ( ch == '\\' && next() ) // Consume '\\'
@@ -425,7 +425,7 @@ inline error parser::parse_string( detail::string_offset &result )
 				char code[5] = { };
 
 				for ( size_t i = 0, S = ( ch == 'x' ) ? 2 : 4; i < S; ++i )
-					if ( !strchr( hexChars, code[i] = next() ) )
+					if ( !strchr( hexChars, code[i] = char( next() ) ) )
 						return make_error( error::invalid_escape_seq );
 
 				uint64_t unicodeChar = 0;
@@ -461,12 +461,12 @@ inline error parser::parse_identifier( detail::string_offset &result )
 {
 	result = string_buffer_offset();
 
-	char firstCh = peek();
+	int firstCh = peek();
 	bool isString = ( firstCh == '\'' ) || ( firstCh == '"' );
 
 	if ( isString && next() ) // Consume '\'' or '"'
 	{
-		char ch = peek();
+		int ch = peek();
 		if ( !isalpha( ch ) && ch != '_' )
 			return make_error( error::syntax_error );
 	}
@@ -475,7 +475,7 @@ inline error parser::parse_identifier( detail::string_offset &result )
 	{
 		string_buffer_add( next() );
 
-		char ch = peek();
+		int ch = peek();
 		if ( !isalpha( ch ) && !isdigit( ch ) && ch != '_' )
 			break;
 	}
@@ -490,7 +490,7 @@ inline error parser::parse_identifier( detail::string_offset &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error parser::parse_literal( token_type &result )
 {
-	char ch = peek();
+	int ch = peek();
 
 	// "true"
 	if ( ch == 't' )
