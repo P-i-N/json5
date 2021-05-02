@@ -201,7 +201,6 @@ public:
 		iterator( const value *p = nullptr ) noexcept : _pair( p ) { }
 		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
-		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		iterator &operator++() noexcept { _pair += 2; return *this; }
 		key_value_pair operator*() const noexcept { return key_value_pair( _pair[0].get_c_str(), _pair[1] ); }
 
