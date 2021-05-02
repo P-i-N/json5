@@ -69,9 +69,13 @@ inline std::string_view get_name_slice( const char *names, size_t index )
 	return std::string_view( names, length );
 }
 
+/* Forward declarations */
+template <typename T> json5::value write( writer &w, const T &in );
+
 //---------------------------------------------------------------------------------------------------------------------
 inline json5::value write( writer &w, bool in ) { return json5::value( in ); }
 inline json5::value write( writer &w, int in ) { return json5::value( double( in ) ); }
+inline json5::value write( writer &w, unsigned in ) { return json5::value( double( in ) ); }
 inline json5::value write( writer &w, float in ) { return json5::value( double( in ) ); }
 inline json5::value write( writer &w, double in ) { return json5::value( in ); }
 inline json5::value write( writer &w, const char *in ) { return w.new_string( in ); }
@@ -190,6 +194,9 @@ inline json5::value write( writer &w, const T &in )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/* Forward declarations */
+template <typename T> error read( const json5::value &in, T &out );
+
 //---------------------------------------------------------------------------------------------------------------------
 inline error read( const json5::value &in, bool &out )
 {
@@ -209,6 +216,7 @@ inline error read_number( const json5::value &in, T &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 inline error read( const json5::value &in, int &out ) { return read_number( in, out ); }
+inline error read( const json5::value &in, unsigned &out ) { return read_number( in, out ); }
 inline error read( const json5::value &in, float &out ) { return read_number( in, out ); }
 inline error read( const json5::value &in, double &out ) { return read_number( in, out ); }
 
@@ -399,8 +407,8 @@ inline error read( const json5::value &in, T &out )
 	if ( !in.is_object() )
 		return { error::object_expected };
 
-	auto tuple = class_wrapper<T>::make_named_tuple( out );
-	return read_named_tuple( json5::object_view( in ), tuple );
+	auto namedTuple = class_wrapper<T>::make_named_tuple( out );
+	return read_named_tuple( json5::object_view( in ), namedTuple );
 }
 
 //---------------------------------------------------------------------------------------------------------------------

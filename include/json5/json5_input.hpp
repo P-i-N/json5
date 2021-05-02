@@ -2,7 +2,13 @@
 
 #include "json5_builder.hpp"
 
-#include <charconv>
+#if __has_include(<xcharconv>)
+	#include <charconv>
+	#if !defined(_JSON5_HAS_CHARCONV)
+		#define _JSON5_HAS_CHARCONV
+	#endif
+#endif
+
 #include <fstream>
 #include <sstream>
 
@@ -27,8 +33,8 @@ public:
 	error parse();
 
 private:
-	char next() { return _chars.next(); }
-	char peek() { return _chars.peek(); }
+	int next() { return _chars.next(); }
+	int peek() { return _chars.peek(); }
 	bool eof() const { return _chars.eof(); }
 	error make_error( int type ) const noexcept { return _chars.make_error( type ); }
 
@@ -60,7 +66,7 @@ class stl_istream : public char_source
 public:
 	stl_istream( std::istream &is ) : _is( is ) { }
 
-	char next() override
+	int next() override
 	{
 		if ( _is.peek() == '\n' )
 		{
@@ -72,9 +78,9 @@ public:
 		return _is.get();
 	}
 
-	char peek() override { return _is.peek(); }
+	int peek() override { return _is.peek(); }
 
-	bool eof() const override { return _is.eof(); }
+	bool eof() const override { return _is.eof() || _is.fail(); }
 
 protected:
 	std::istream &_is;
@@ -277,13 +283,13 @@ inline error parser::peek_next_token( token_type &result )
 
 	while ( !eof() )
 	{
-		char ch = peek();
+		int ch = peek();
 		if ( ch == '\n' )
 		{
 			if ( parsingComment == comment_type::line )
 				parsingComment = comment_type::none;
 		}
-		else if ( parsingComment != comment_type::none || ch <= 32 )
+		else if ( parsingComment != comment_type::none || ( ch > 0 && ch <= 32 ) )
 		{
 			if ( parsingComment == comment_type::block && ch == '*' && next() ) // Consume '*'
 			{
@@ -353,15 +359,23 @@ inline error parser::parse_number( double &result )
 	{
 		buff[length++] = next();
 
-		char ch = peek();
-		if ( ch <= 32 || ch == ',' || ch == '}' || ch == ']' )
+		int ch = peek();
+		if ( ( ch > 0 && ch <= 32 ) || ch == ',' || ch == '}' || ch == ']' )
 			break;
 	}
 
-	char *end = nullptr;
-	result = strtod(buff, &end);
-	if (buff == end)
+#if defined(_JSON5_HAS_CHARCONV)
+	auto convResult = std::from_chars( buff, buff + length, result );
+
+	if ( convResult.ec != std::errc() )
 		return make_error( error::syntax_error );
+#else
+	char *buffEnd = nullptr;
+	result = strtod( buff, &buffEnd );
+
+	if ( result == 0.0 && buffEnd == buff )
+		return make_error( error::syntax_error );
+#endif
 
 	return { error::none };
 }
@@ -378,7 +392,7 @@ inline error parser::parse_string( detail::string_offset &result )
 
 	while ( !eof() )
 	{
-		char ch = peek();
+		int ch = peek();
 		if ( ( ( singleQuoted && ch == '\'' ) || ( !singleQuoted && ch == '"' ) ) && next() ) // Consume '\'' or '"'
 			break;
 		else if ( ch == '\\' && next() ) // Consume '\\'
@@ -411,11 +425,21 @@ inline error parser::parse_string( detail::string_offset &result )
 				char code[5] = { };
 
 				for ( size_t i = 0, S = ( ch == 'x' ) ? 2 : 4; i < S; ++i )
-					if ( !strchr( hexChars, code[i] = next() ) )
+					if ( !strchr( hexChars, code[i] = char( next() ) ) )
 						return make_error( error::invalid_escape_seq );
 
 				uint64_t unicodeChar = 0;
+
+#if defined(_JSON5_HAS_CHARCONV)
 				std::from_chars( code, code + 5, unicodeChar, 16 );
+#else
+				char *codeEnd = nullptr;
+				unicodeChar = strtoull( code, &codeEnd, 16 );
+
+				if ( !unicodeChar && codeEnd == code )
+					return make_error( error::invalid_escape_seq );
+#endif
+
 				string_buffer_add_utf8( uint32_t( unicodeChar ) );
 			}
 			else
@@ -437,12 +461,12 @@ inline error parser::parse_identifier( detail::string_offset &result )
 {
 	result = string_buffer_offset();
 
-	char firstCh = peek();
+	int firstCh = peek();
 	bool isString = ( firstCh == '\'' ) || ( firstCh == '"' );
 
 	if ( isString && next() ) // Consume '\'' or '"'
 	{
-		char ch = peek();
+		int ch = peek();
 		if ( !isalpha( ch ) && ch != '_' )
 			return make_error( error::syntax_error );
 	}
@@ -451,7 +475,7 @@ inline error parser::parse_identifier( detail::string_offset &result )
 	{
 		string_buffer_add( next() );
 
-		char ch = peek();
+		int ch = peek();
 		if ( !isalpha( ch ) && !isdigit( ch ) && ch != '_' )
 			break;
 	}
@@ -466,7 +490,7 @@ inline error parser::parse_identifier( detail::string_offset &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error parser::parse_literal( token_type &result )
 {
-	char ch = peek();
+	int ch = peek();
 
 	// "true"
 	if ( ch == 't' )
@@ -504,8 +528,8 @@ inline error parser::parse_literal( token_type &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error from_stream( std::istream &is, document &doc )
 {
-	auto isWrapper = detail::stl_istream( is );
-	parser r( doc, isWrapper );
+	detail::stl_istream src( is );
+	parser r( doc, src );
 	return r.parse();
 }
 

@@ -144,7 +144,7 @@ struct error final
 		"number expected", "string expected", "object expected", "array expected",
 		"wrong array size", "invalid enum", "could not open stream",
 	};
-
+	
 	int type = none;
 	int line = 0;
 	int column = 0;
@@ -198,8 +198,8 @@ class char_source
 public:
 	virtual ~char_source() = default;
 
-	virtual char next() = 0;
-	virtual char peek() = 0;
+	virtual int next() = 0;
+	virtual int peek() = 0;
 	virtual bool eof() const = 0;
 
 	error make_error( int type ) const noexcept { return error{ type, _line, _column }; }
