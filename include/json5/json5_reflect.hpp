@@ -3,6 +3,7 @@
 #include "json5_builder.hpp"
 
 #include <array>
+#include <fstream>
 #include <map>
 #include <unordered_map>
 
@@ -36,12 +37,15 @@ template <typename T> error from_file( const std::string &fileName, T &out );
 
 namespace detail {
 
+// Pre-declare so compiler knows it exists before it is attempted to be used
+template <typename T> error read(const json5::value& in, T& out);
+
 class writer final : public builder
 {
 public:
 	writer( document &doc, const writer_params &wp ): builder( doc ), _params( wp ) { }
 
-	const writer_params &params() const noexcept { _params; }
+	const writer_params &params() const noexcept { return _params; }
 
 private:
 	writer_params _params;

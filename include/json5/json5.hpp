@@ -199,6 +199,7 @@ public:
 	{
 	public:
 		iterator( const value *p = nullptr ) noexcept : _pair( p ) { }
+		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
 		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		iterator &operator++() noexcept { _pair += 2; return *this; }

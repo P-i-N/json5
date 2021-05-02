@@ -383,7 +383,7 @@ inline error parser::parse_number( double &result )
 //---------------------------------------------------------------------------------------------------------------------
 inline error parser::parse_string( detail::string_offset &result )
 {
-	static const char *hexChars = "0123456789abcdefABCDEF";
+	static const constexpr char *hexChars = "0123456789abcdefABCDEF";
 
 	bool singleQuoted = peek() == '\'';
 	next(); // Consume '\'' or '"'
@@ -544,6 +544,9 @@ inline error from_string( const std::string &str, document &doc )
 inline error from_file( const std::string &fileName, document &doc )
 {
 	std::ifstream ifs( fileName );
+	if (!ifs.is_open())
+		return error{ error::could_not_open, 0, 0 };
+
 	return from_stream( ifs, doc );
 }
 
