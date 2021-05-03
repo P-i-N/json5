@@ -18,10 +18,10 @@ namespace json5 {
 error from_stream( std::istream &is, document &doc );
 
 // Parse json5::document from string
-error from_string( const std::string &str, document &doc );
+error from_string( std::string_view str, document &doc );
 
 // Parse json5::document from file
-error from_file( const std::string &fileName, document &doc );
+error from_file( std::string_view fileName, document &doc );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -61,6 +61,7 @@ private:
 
 namespace detail {
 
+//---------------------------------------------------------------------------------------------------------------------
 class stl_istream : public char_source
 {
 public:
@@ -84,6 +85,50 @@ public:
 
 protected:
 	std::istream &_is;
+};
+
+//---------------------------------------------------------------------------------------------------------------------
+class memory_block : public char_source
+{
+public:
+	memory_block( const void* ptr, size_t size )
+		: _cursor( reinterpret_cast<const char*>( ptr ) )
+		, _size( ptr ? size : 0 )
+	{
+	
+	}
+
+	int next() override
+	{
+		if ( _size == 0 )
+			return -1;
+
+		int ch = uint8_t( *_cursor++ );
+
+		if ( ch == '\n' )
+		{
+			_column = 0;
+			++_line;
+		}
+
+		++_column;
+		--_size;
+		return ch;
+	}
+
+	int peek() override
+	{
+		if ( _size == 0 )
+			return -1;
+
+		return uint8_t( *_cursor );
+	}
+
+	bool eof() const override { return _size == 0; }
+
+protected:
+	const char* _cursor = nullptr;
+	size_t _size = 0;
 };
 
 } // namespace detail
@@ -534,20 +579,22 @@ inline error from_stream( std::istream &is, document &doc )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_string( const std::string &str, document &doc )
+inline error from_string( std::string_view str, document &doc )
 {
-	std::istringstream is( str );
-	return from_stream( is, doc );
+	detail::memory_block src( str.data(), str.size() );
+	parser r( doc, src );
+	return r.parse();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_file( const std::string &fileName, document &doc )
+inline error from_file( std::string_view fileName, document &doc )
 {
-	std::ifstream ifs( fileName );
-	if (!ifs.is_open())
-		return error{ error::could_not_open, 0, 0 };
+	std::ifstream ifs( std::string( fileName ).c_str() );
+	if ( !ifs.is_open() )
+		return { error::could_not_open };
 
-	return from_stream( ifs, doc );
+	auto str = std::string( std::istreambuf_iterator<char>( ifs ), std::istreambuf_iterator<char>() );
+	return from_string( std::string_view( str ), doc );
 }
 
 } // namespace json5

@@ -60,18 +60,6 @@ JSON5_CLASS_INHERIT( Bar, BarBase, age )
 //---------------------------------------------------------------------------------------------------------------------
 int main( int argc, char *argv[] )
 {
-	/// Visitor test
-	if ( false )
-	{
-		json5::document doc;
-
-		{
-			Stopwatch sw{ "Load twitter.json" };
-			if ( auto err = json5::from_file( "twitter.json", doc ) )
-				json5::to_stream( std::cout, err );
-		}
-	}
-
 	/// Build
 	{
 		json5::document doc;
@@ -187,6 +175,21 @@ int main( int argc, char *argv[] )
 		else
 			std::cout << "foo1 != foo2" << std::endl;
 		*/
+	}
+
+	/// Performance test
+	{
+		std::ifstream ifs("twitter.json");
+		std::string str((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+
+		Stopwatch sw{ "Parse twitter.json 100x" };
+
+		for (int i = 0; i < 100; ++i)
+		{
+			json5::document doc;
+			if (auto err = json5::from_string(str, doc))
+				break;
+		}
 	}
 
 	return 0;

@@ -22,16 +22,16 @@ template <typename T> void to_string( std::string &str, const T &in, const write
 template <typename T> std::string to_string( const T &in, const writer_params &wp = writer_params() );
 
 //
-template <typename T> bool to_file( const std::string &fileName, const T &in, const writer_params &wp = writer_params() );
+template <typename T> bool to_file( std::string_view fileName, const T &in, const writer_params &wp = writer_params() );
 
 //
 template <typename T> error from_document( const document &doc, T &out );
 
 //
-template <typename T> error from_string( const std::string &str, T &out );
+template <typename T> error from_string( std::string_view str, T &out );
 
 //
-template <typename T> error from_file( const std::string &fileName, T &out );
+template <typename T> error from_file( std::string_view fileName, T &out );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -474,9 +474,9 @@ inline std::string to_string( const T &in, const writer_params &wp )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline bool to_file( const std::string &fileName, const T &in, const writer_params &wp )
+inline bool to_file( std::string_view fileName, const T &in, const writer_params &wp )
 {
-	std::ofstream ofs( fileName );
+	std::ofstream ofs( std::string( fileName ).c_str() );
 	to_stream( ofs, in, wp );
 	return true;
 }
@@ -492,7 +492,7 @@ inline error from_document( const document &doc, T &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_string( const std::string &str, T &out )
+inline error from_string( std::string_view str, T &out )
 {
 	document doc;
 	if ( auto err = from_string( str, doc ) )
@@ -503,7 +503,7 @@ inline error from_string( const std::string &str, T &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_file( const std::string &fileName, T &out )
+inline error from_file( std::string_view fileName, T &out )
 {
 	document doc;
 	if ( auto err = from_file( fileName, doc ) )
