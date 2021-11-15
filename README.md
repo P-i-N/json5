@@ -75,9 +75,7 @@ namespace json5::detail {
 inline json5::value write( writer &w, const vec3 &in )
 {
 	w.push_array();
-	w += write( w, in.x );
-	w += write( w, in.y );
-	w += write( w, in.z );
+	w( in.x, in.y, in.z );
 	return w.pop();
 }
 
