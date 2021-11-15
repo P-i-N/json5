@@ -2,6 +2,7 @@
 #include <json5/json5_input.hpp>
 #include <json5/json5_output.hpp>
 #include <json5/json5_reflect.hpp>
+#include <json5/json5_streams.hpp>
 
 #include <chrono>
 #include <iostream>
@@ -45,7 +46,7 @@ JSON5_ENUM( MyEnum, Zero, First, Second, Third )
 
 struct BarBase
 {
-	std::string name;
+	std::string name = "";
 };
 
 JSON5_CLASS( BarBase, name )
@@ -55,7 +56,7 @@ struct Bar : BarBase
 	int age = 0;
 };
 
-JSON5_CLASS_INHERIT( Bar, BarBase, age )
+JSON5_CLASS( Bar, name, age )
 
 //---------------------------------------------------------------------------------------------------------------------
 int main( int argc, char *argv[] )
@@ -67,15 +68,13 @@ int main( int argc, char *argv[] )
 
 		b.push_object();
 		{
-			b["x"] = b.new_string( "Hello!" );
+			b["x"] = "Hello!";
 			b["y"] = 123.0;
 			b["z"] = true;
 
 			b.push_array();
 			{
-				b += b.new_string( "a" );
-				b += b.new_string( "b" );
-				b += b.new_string( "c" );
+				b("a", "b", "c");
 			}
 			b["arr"] = b.pop();
 		}
@@ -88,7 +87,12 @@ int main( int argc, char *argv[] )
 	{
 		json5::document doc;
 		PrintError( json5::from_file( "short_example.json5", doc ) );
-		json5::to_stream( std::cout, doc );
+		std::cout << json5::to_string( doc );
+
+		if ( doc.is_document() )
+		{
+			printf( "Is document!\n" );
+		}
 	}
 
 	/// File load/save test
@@ -140,7 +144,7 @@ int main( int argc, char *argv[] )
 	{
 		json5::document doc;
 		PrintError( json5::from_string( "{ text: 'Hello\\\n, world!' }", doc ) );
-		json5::to_stream( std::cout, doc );
+		std::cout << json5::to_string( doc );
 	}
 
 	/// Reflection test
@@ -157,9 +161,10 @@ int main( int argc, char *argv[] )
 			std::array<float, 3> position = { 10.0f, 20.0f, 30.0f };
 
 			Bar bar = { "Somebody Unknown", 500 };
+			BarBase barBase = { "Santa Claus" };
 			MyEnum e = MyEnum::Second;
 
-			JSON5_MEMBERS( x, y, z, text, numbers, barMap, position, bar, e )
+			JSON5_MEMBERS( x, y, z, text, numbers, barMap, position, bar, barBase, e )
 			//bool operator==( const Foo &o ) const noexcept { return make_tuple() == o.make_tuple(); }
 		};
 
@@ -179,15 +184,15 @@ int main( int argc, char *argv[] )
 
 	/// Performance test
 	{
-		std::ifstream ifs("twitter.json");
-		std::string str((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+		std::ifstream ifs( "twitter.json" );
+		std::string str( ( std::istreambuf_iterator<char>( ifs ) ), std::istreambuf_iterator<char>() );
 
-		Stopwatch sw{ "Parse twitter.json 100x" };
+		Stopwatch sw{ "Parse twitter.json 10x" };
 
-		for (int i = 0; i < 100; ++i)
+		for ( int i = 0; i < 10; ++i )
 		{
 			json5::document doc;
-			if (auto err = json5::from_string(str, doc))
+			if ( auto err = json5::from_string( str, doc ) )
 				break;
 		}
 	}

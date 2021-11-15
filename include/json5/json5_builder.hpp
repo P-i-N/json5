@@ -11,24 +11,35 @@ public:
 
 	const document &doc() const noexcept { return _doc; }
 
-	detail::string_offset string_buffer_offset() const noexcept;
-	detail::string_offset string_buffer_add( std::string_view str );
-	void string_buffer_add( char ch ) { _doc._strings.push_back( ch ); }
-	void string_buffer_add_utf8( uint32_t ch );
-
-	value new_string( detail::string_offset stringOffset ) { return value( value_type::string, stringOffset ); }
 	value new_string( std::string_view str ) { return new_string( string_buffer_add( str ) ); }
 
 	void push_object();
 	void push_array();
 	value pop();
+	
+	template <typename... Args>
+	builder& operator()( Args... values )
+	{
+		bool results[] = { add_item(values)... };
+		return *this;
+	}
 
-	builder &operator+=( value v );
-	value &operator[]( detail::string_offset keyOffset );
-	value &operator[]( std::string_view key ) { return ( *this )[string_buffer_add( key )]; }
+	value& operator[]( std::string_view key );
 
 protected:
 	void reset() noexcept;
+
+	detail::string_offset string_buffer_offset() const noexcept;
+	detail::string_offset string_buffer_add( std::string_view str );
+	void string_buffer_add( char ch ) { _doc._strings.push_back( ch ); }
+	void string_buffer_add_utf8( uint32_t ch );
+
+	value new_string( detail::string_offset stringOffset )
+	{
+		return value(value_type::null, value::type_string_off | stringOffset);
+	}
+
+	bool add_item( value v );
 
 	document &_doc;
 	std::vector<value> _stack;
@@ -37,6 +48,26 @@ protected:
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void builder::reset() noexcept
+{
+	_doc.reset();
+	_stack.clear();
+	_values.clear();
+	_counts.clear();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline bool builder::add_item( value v )
+{
+	if ( _stack.empty() )
+		return false;
+
+	_values.push_back( v );
+	_counts.back() += 1;
+	return true;
+}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline detail::string_offset builder::string_buffer_offset() const noexcept
@@ -102,24 +133,22 @@ inline void builder::string_buffer_add_utf8( uint32_t ch )
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::push_object()
 {
-	auto v = value( value_type::object, nullptr );
-	_stack.emplace_back( v );
+	_stack.push_back( value( value_type::object, nullptr ) );
 	_counts.push_back( 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::push_array()
 {
-	auto v = value( value_type::array, nullptr );
-	_stack.emplace_back( v );
+	_stack.push_back( value( value_type::array, nullptr ) );
 	_counts.push_back( 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline value builder::pop()
 {
-	auto result = _stack.back();
-	auto count = _counts.back();
+	value result = _stack.back();
+	size_t count = _counts.back();
 
 	result.payload( _doc._values.size() );
 
@@ -144,28 +173,11 @@ inline value builder::pop()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline builder &builder::operator+=( value v )
+inline value &builder::operator[]( std::string_view key )
 {
-	_values.push_back( v );
+	add_item( new_string( key ) );
 	_counts.back() += 1;
-	return *this;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline value &builder::operator[]( detail::string_offset keyOffset )
-{
-	_values.push_back( new_string( keyOffset ) );
-	_counts.back() += 2;
 	return _values.emplace_back();
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void builder::reset() noexcept
-{
-	_doc._data = value::type_null;
-	_doc._values.clear();
-	_doc._strings.clear();
-	_doc._strings.push_back( 0 );
 }
 
 } // namespace json5

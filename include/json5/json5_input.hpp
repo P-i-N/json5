@@ -9,34 +9,25 @@
 	#endif
 #endif
 
-#include <fstream>
-#include <sstream>
-
 namespace json5 {
-
-// Parse json5::document from stream
-error from_stream( std::istream &is, document &doc );
 
 // Parse json5::document from string
 error from_string( std::string_view str, document &doc );
-
-// Parse json5::document from file
-error from_file( std::string_view fileName, document &doc );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class parser final : builder
 {
 public:
-	parser( document &doc, detail::char_source &chars ) : builder( doc ), _chars( chars ) { }
+	parser( document &doc, const char *utf8Str, size_t len = size_t( -1 ) );
 
 	error parse();
 
 private:
-	int next() { return _chars.next(); }
-	int peek() { return _chars.peek(); }
-	bool eof() const { return _chars.eof(); }
-	error make_error( int type ) const noexcept { return _chars.make_error( type ); }
+	int next();
+	int peek() const;
+	bool eof() const { return _size == 0; }
+	error make_error( int type ) const noexcept { return error{ type, _loc }; }
 
 	enum class token_type
 	{
@@ -54,91 +45,33 @@ private:
 	error parse_identifier( detail::string_offset &result );
 	error parse_literal( token_type &result );
 
-	detail::char_source &_chars;
-};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace detail {
-
-//---------------------------------------------------------------------------------------------------------------------
-class stl_istream : public char_source
-{
-public:
-	stl_istream( std::istream &is ) : _is( is ) { }
-
-	int next() override
-	{
-		if ( _is.peek() == '\n' )
-		{
-			_column = 0;
-			++_line;
-		}
-
-		++_column;
-		return _is.get();
-	}
-
-	int peek() override { return _is.peek(); }
-
-	bool eof() const override { return _is.eof() || _is.fail(); }
-
-protected:
-	std::istream &_is;
-};
-
-//---------------------------------------------------------------------------------------------------------------------
-class memory_block : public char_source
-{
-public:
-	memory_block( const void* ptr, size_t size )
-		: _cursor( reinterpret_cast<const char*>( ptr ) )
-		, _size( ptr ? size : 0 )
-	{
-	
-	}
-
-	int next() override
-	{
-		if ( _size == 0 )
-			return -1;
-
-		int ch = uint8_t( *_cursor++ );
-
-		if ( ch == '\n' )
-		{
-			_column = 0;
-			++_line;
-		}
-
-		++_column;
-		--_size;
-		return ch;
-	}
-
-	int peek() override
-	{
-		if ( _size == 0 )
-			return -1;
-
-		return uint8_t( *_cursor );
-	}
-
-	bool eof() const override { return _size == 0; }
-
-protected:
-	const char* _cursor = nullptr;
+	const char *_cursor = nullptr;
 	size_t _size = 0;
+	location _loc = { };
 };
 
-} // namespace detail
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------------------------------------------------
+inline parser::parser( document &doc, const char *utf8Str, size_t len )
+	: builder( doc )
+	, _cursor( utf8Str )
+{
+	if ( _cursor && len == size_t( -1 ) )
+		_size = strlen( _cursor );
+	else
+		_size = len;
+}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline error parser::parse()
 {
 	reset();
+
+	_loc = { };
+
+	if ( _cursor && _size )
+		_loc = { 1, 1, 0 };
 
 	if ( auto err = parse_value( _doc ) )
 		return err;
@@ -150,11 +83,42 @@ inline error parser::parse()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline int parser::next()
+{
+	if ( _size == 0 )
+		return -1;
+
+	int ch = uint8_t( *_cursor++ );
+
+	if ( ch == '\n' )
+	{
+		_loc.column = 0;
+		++_loc.line;
+	}
+
+	++_loc.column;
+	++_loc.offset;
+	--_size;
+	return ch;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline int parser::peek() const
+{
+	if ( _size == 0 )
+		return -1;
+
+	return uint8_t( *_cursor );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline error parser::parse_value( value &result )
 {
 	token_type tt = token_type::unknown;
 	if ( auto err = peek_next_token( tt ) )
 		return err;
+
+	location loc = _loc;
 
 	switch ( tt )
 	{
@@ -220,6 +184,7 @@ inline error parser::parse_value( value &result )
 			return make_error( error::syntax_error );
 	}
 
+	result._loc = loc;
 	return { error::none };
 }
 
@@ -236,6 +201,7 @@ inline error parser::parse_object()
 			return err;
 
 		detail::string_offset keyOffset;
+		location keyLoc = { };
 
 		switch ( tt )
 		{
@@ -245,6 +211,7 @@ inline error parser::parse_object()
 				if ( expectComma )
 					return make_error( error::comma_expected );
 
+				keyLoc = _loc;
 				if ( auto err = parse_identifier( keyOffset ) )
 					return err;
 			}
@@ -278,7 +245,10 @@ inline error parser::parse_object()
 		if ( auto err = parse_value( newValue ) )
 			return err;
 
-		( *this )[keyOffset] = newValue;
+		value key = new_string( keyOffset );
+		key._loc = keyLoc;
+
+		(*this)( key, newValue );
 		expectComma = true;
 	}
 
@@ -314,7 +284,7 @@ inline error parser::parse_array()
 		if ( auto err = parse_value( newValue ) )
 			return err;
 
-		( *this ) += newValue;
+		add_item( newValue );
 		expectComma = true;
 	}
 
@@ -571,30 +541,10 @@ inline error parser::parse_literal( token_type &result )
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_stream( std::istream &is, document &doc )
-{
-	detail::stl_istream src( is );
-	parser r( doc, src );
-	return r.parse();
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline error from_string( std::string_view str, document &doc )
 {
-	detail::memory_block src( str.data(), str.size() );
-	parser r( doc, src );
+	parser r( doc, str.data(), str.size() );
 	return r.parse();
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline error from_file( std::string_view fileName, document &doc )
-{
-	std::ifstream ifs( std::string( fileName ).c_str() );
-	if ( !ifs.is_open() )
-		return { error::could_not_open };
-
-	auto str = std::string( std::istreambuf_iterator<char>( ifs ), std::istreambuf_iterator<char>() );
-	return from_string( std::string_view( str ), doc );
 }
 
 } // namespace json5

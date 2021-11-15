@@ -2,14 +2,9 @@
 
 #include "json5.hpp"
 
-#include <iomanip>
-#include <fstream>
-#include <sstream>
+#include <inttypes.h>
 
 namespace json5 {
-
-// Writes json5::document into stream
-void to_stream( std::ostream &os, const document &doc, const writer_params &wp = writer_params() );
 
 // Converts json5::document to string
 void to_string( std::string &str, const document &doc, const writer_params &wp = writer_params() );
@@ -17,95 +12,94 @@ void to_string( std::string &str, const document &doc, const writer_params &wp =
 // Returns json5::document converted to string
 std::string to_string( const document &doc, const writer_params &wp = writer_params() );
 
-// Write json5::document into file, returns 'true' on success
-bool to_file( const std::string &fileName, const document &doc, const writer_params &wp = writer_params() );
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const char *str, char quotes, bool escapeUnicode )
+inline void to_string( std::string &str, const char *utf8Str, char quotes, bool escapeUnicode )
 {
 	if ( quotes )
-		os << quotes;
+		str += quotes;
 
-	while ( *str )
+	while ( *utf8Str )
 	{
 		bool advance = true;
 
-		if ( str[0] == '\n' )
-			os << "\\n";
-		else if ( str[0] == '\r' )
-			os << "\\r";
-		else if ( str[0] == '\t' )
-			os << "\\t";
-		else if ( str[0] == '"' && quotes == '"' )
-			os << "\\\"";
-		else if ( str[0] == '\'' && quotes == '\'' )
-			os << "\\'";
-		else if ( str[0] == '\\' )
-			os << "\\\\";
-		else if ( uint8_t( str[0] ) >= 128 && escapeUnicode )
+		if ( utf8Str[0] == '\n' )
+			str += "\\n";
+		else if ( utf8Str[0] == '\r' )
+			str += "\\r";
+		else if ( utf8Str[0] == '\t' )
+			str += "\\t";
+		else if ( utf8Str[0] == '"' && quotes == '"' )
+			str += "\\\"";
+		else if ( utf8Str[0] == '\'' && quotes == '\'' )
+			str += "\\'";
+		else if ( utf8Str[0] == '\\' )
+			str += "\\\\";
+		else if ( uint8_t( utf8Str[0] ) >= 128 && escapeUnicode )
 		{
 			uint32_t ch = 0;
 
-			if ( ( *str & 0b1110'0000u ) == 0b1100'0000u )
+			if ( ( *utf8Str & 0b1110'0000u ) == 0b1100'0000u )
 			{
-				ch |= ( ( *str++ ) & 0b0001'1111u ) << 6;
-				ch |= ( ( *str++ ) & 0b0011'1111u );
+				ch |= ( ( *utf8Str++ ) & 0b0001'1111u ) << 6;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u );
 			}
-			else if ( ( *str & 0b1111'0000u ) == 0b1110'0000u )
+			else if ( ( *utf8Str & 0b1111'0000u ) == 0b1110'0000u )
 			{
-				ch |= ( ( *str++ ) & 0b0000'1111u ) << 12;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 6;
-				ch |= ( ( *str++ ) & 0b0011'1111u );
+				ch |= ( ( *utf8Str++ ) & 0b0000'1111u ) << 12;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 6;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u );
 			}
-			else if ( ( *str & 0b1111'1000u ) == 0b1111'0000u )
+			else if ( ( *utf8Str & 0b1111'1000u ) == 0b1111'0000u )
 			{
-				ch |= ( ( *str++ ) & 0b0000'0111u ) << 18;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 12;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 6;
-				ch |= ( ( *str++ ) & 0b0011'1111u );
+				ch |= ( ( *utf8Str++ ) & 0b0000'0111u ) << 18;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 12;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 6;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u );
 			}
-			else if ( ( *str & 0b1111'1100u ) == 0b1111'1000u )
+			else if ( ( *utf8Str & 0b1111'1100u ) == 0b1111'1000u )
 			{
-				ch |= ( ( *str++ ) & 0b0000'0011u ) << 24;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 18;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 12;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 6;
-				ch |= ( ( *str++ ) & 0b0011'1111u );
+				ch |= ( ( *utf8Str++ ) & 0b0000'0011u ) << 24;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 18;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 12;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 6;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u );
 			}
-			else if ( ( *str & 0b1111'1110u ) == 0b1111'1100u )
+			else if ( ( *utf8Str & 0b1111'1110u ) == 0b1111'1100u )
 			{
-				ch |= ( ( *str++ ) & 0b0000'0001u ) << 30;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 24;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 18;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 12;
-				ch |= ( ( *str++ ) & 0b0011'1111u ) << 6;
-				ch |= ( ( *str++ ) & 0b0011'1111u );
+				ch |= ( ( *utf8Str++ ) & 0b0000'0001u ) << 30;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 24;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 18;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 12;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u ) << 6;
+				ch |= ( ( *utf8Str++ ) & 0b0011'1111u );
 			}
 
 			if ( ch <= std::numeric_limits<uint16_t>::max() )
 			{
-				os << "\\u" << std::hex << std::setfill( '0' ) << std::setw( 4 ) << ch;
+				JSON5_ASSERT( 0 ); // TODO
+
+				//os << "\\u" << std::hex << std::setfill( '0' ) << std::setw( 4 ) << ch;
 			}
 			else
-				os << "?"; // JSON can't encode Unicode chars > 65535 (emojis)
+				str += "?"; // JSON can't encode Unicode chars > 65535 (emojis)
 
 			advance = false;
 		}
 		else
-			os << *str;
+			str += *utf8Str;
 
 		if ( advance )
-			++str;
+			++utf8Str;
 	}
 
 	if ( quotes )
-		os << quotes;
+		str += quotes;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const value &v, const writer_params &wp, int depth )
+inline void to_string( std::string &str, const value &v, const writer_params &wp, int depth )
 {
 	const char *kvSeparator = ": ";
 	const char *eol = wp.eol;
@@ -118,115 +112,133 @@ inline void to_stream( std::ostream &os, const value &v, const writer_params &wp
 	}
 
 	if ( v.is_null() )
-		os << "null";
+		str += "null";
 	else if ( v.is_boolean() )
-		os << ( v.get_bool() ? "true" : "false" );
+		str += ( v.get_bool() ? "true" : "false" );
 	else if ( v.is_number() )
 	{
-		if ( double _, d = v.get<double>(); modf( d, &_ ) == 0.0 )
-			os << v.get<int64_t>();
+		char buff[64] = { };
+
+		if ( double _, d = v.get_number( 0.0 ); modf( d, &_ ) == 0.0 ) // Omit trailing zeros
+			sprintf( buff, "%" PRIi64, int64_t( d ) );
 		else
-			os << d;
+			sprintf( buff, "%lf", d );
+
+		str += buff;
 	}
 	else if ( v.is_string() )
 	{
-		to_stream( os, v.get_c_str(), '"', wp.escape_unicode );
+		to_string( str, v.get_c_str(), '"', wp.escape_unicode );
 	}
 	else if ( v.is_array() )
 	{
 		if ( auto av = json5::array_view( v ); !av.empty() )
 		{
-			os << "[" << eol;
+			bool compact = ( av.size() <= wp.compact_array_size );
+
+			str += "[";
+
+			if ( !compact )
+				str += eol;
+
 			for ( size_t i = 0, S = av.size(); i < S; ++i )
 			{
-				for ( int i = 0; i <= depth; ++i ) os << wp.indentation;
-				to_stream( os, av[i], wp, depth + 1 );
-				if ( i < S - 1 ) os << ",";
-				os << eol;
+				if ( compact )
+					str += " ";
+				else
+					for ( int i = 0; i <= depth; ++i ) str += wp.indentation;
+
+				to_string( str, av[i], wp, depth + 1 );
+				if ( i < S - 1 ) str += ",";
+
+				if ( !compact )
+					str += eol;
 			}
 
-			for ( int i = 0; i < depth; ++i ) os << wp.indentation;
-			os << "]";
+			if ( compact )
+				str += " ]";
+			else
+			{
+				for (int i = 0; i < depth; ++i) str += wp.indentation;
+				str += "]";
+			}
 		}
 		else
-			os << "[]";
+			str += "[]";
 	}
 	else if ( v.is_object() )
 	{
 		if ( auto ov = json5::object_view( v ); !ov.empty() )
 		{
-			os << "{" << eol;
+			bool compact = ( ov.size() <= wp.compact_object_size );
+
+			str += "{";
+
+			if ( !compact )
+				str += eol;
+
 			size_t count = ov.size();
-			for ( auto kvp : ov )
+			for ( const auto &kvp : ov )
 			{
-				for ( int i = 0; i <= depth; ++i ) os << wp.indentation;
+				if ( compact )
+					str += " ";
+				else
+					for ( int i = 0; i <= depth; ++i ) str += wp.indentation;
 
 				if ( wp.json_compatible )
-					os << "\"" << kvp.first << "\"" << kvSeparator;
+				{
+					str += "\"";
+					str += kvp.first;
+					str += "\"";
+				}
 				else
-					os << kvp.first << kvSeparator;
+					str += kvp.first;
 
-				to_stream( os, kvp.second, wp, depth + 1 );
-				if ( --count ) os << ",";
-				os << eol;
+				str += kvSeparator;
+
+				to_string( str, kvp.second, wp, depth + 1 );
+				if ( --count ) str += ",";
+
+				if ( !compact )
+					str += eol;
 			}
 
-			for ( int i = 0; i < depth; ++i ) os << wp.indentation;
-			os << "}";
+			if ( compact )
+				str += " }";
+			else
+			{
+				for (int i = 0; i < depth; ++i) str += wp.indentation;
+				str += "}";
+			}
 		}
 		else
-			os << "{}";
+			str += "{}";
 	}
 
 	if ( !depth )
-		os << eol;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const document &doc, const writer_params &wp )
-{
-	to_stream( os, doc, wp, 0 );
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void to_string( std::string &str, const document &doc, const writer_params &wp )
-{
-	std::ostringstream os;
-	to_stream( os, doc, wp );
-	str = os.str();
+		str += eol;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline std::string to_string( const document &doc, const writer_params &wp )
 {
 	std::string result;
-	to_string( result, doc, wp );
+	to_string( result, doc, wp, 0 );
 	return result;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline bool to_file( const std::string &fileName, const document &doc, const writer_params &wp )
-{
-	std::ofstream ofs( fileName );
-	if (!ofs.is_open())
-		return false;
-
-	to_stream( ofs, doc, wp );
-	return true;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline void to_stream( std::ostream &os, const error &err )
-{
-	os << err.type_string[err.type] << " at " << err.line << ":" << err.column;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline std::string to_string( const error &err )
 {
+	JSON5_ASSERT( 0 ); // TODO
+
+	/*
 	std::ostringstream os;
 	to_stream( os, err );
 	return os.str();
+	*/
+
+	return "";
 }
 
 } // namespace json5

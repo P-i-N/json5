@@ -1,6 +1,11 @@
 #pragma once
 
-#include <tuple>
+#include <type_traits>
+
+#if !defined(JSON5_ASSERT)
+	#include <cassert>
+	#define JSON5_ASSERT(_Cond) assert(_Cond)
+#endif
 
 /*
 	Generates class serialization helper for specified type:
@@ -14,37 +19,13 @@
 #define JSON5_CLASS(_Name, ...) \
 	template <> struct json5::detail::class_wrapper<_Name> { \
 		static constexpr const char* names = #__VA_ARGS__; \
-		inline static auto make_named_tuple(_Name &out) noexcept { \
-			return std::tuple( names, std::tie( _JSON5_CONCAT( _JSON5_PREFIX_OUT, ( __VA_ARGS__ ) ) ) ); \
+		inline static auto make_named_ref_list( _Name &out ) noexcept { \
+			auto &[__VA_ARGS__] = out; \
+			return json5::detail::named_ref_list( names, __VA_ARGS__ ); \
 		} \
-		inline static auto make_named_tuple( const _Name &in ) noexcept { \
-			return std::tuple( names, std::tie( _JSON5_CONCAT( _JSON5_PREFIX_IN, ( __VA_ARGS__ ) ) ) ); \
-		} \
-	};
-
-/*
-	Generates class serialization helper for specified type with inheritance:
-
-	namespace foo {
-		struct Base { std::string name; };
-		struct Bar : Base { int x; float y; bool z; };
-	}
-
-	JSON5_CLASS(foo::Base, name)
-	JSON5_CLASS_INHERIT(foo::Bar, foo::Base, x, y, z)
-*/
-#define JSON5_CLASS_INHERIT(_Name, _Base, ...) \
-	template <> struct json5::detail::class_wrapper<_Name> { \
-		static constexpr const char* names = #__VA_ARGS__; \
-		inline static auto make_named_tuple(_Name &out) noexcept { \
-			return std::tuple_cat( \
-			                       json5::detail::class_wrapper<_Base>::make_named_tuple(out), \
-			                       std::tuple(names, std::tie( _JSON5_CONCAT(_JSON5_PREFIX_OUT, (__VA_ARGS__)) ))); \
-		} \
-		inline static auto make_named_tuple(const _Name &in) noexcept { \
-			return std::tuple_cat( \
-			                       json5::detail::class_wrapper<_Base>::make_named_tuple(in), \
-			                       std::tuple(names, std::tie( _JSON5_CONCAT(_JSON5_PREFIX_IN, (__VA_ARGS__)) ))); \
+		inline static auto make_named_ref_list( const _Name &in ) noexcept { \
+			const auto &[__VA_ARGS__] = in; \
+			return json5::detail::named_ref_list( names, __VA_ARGS__ ); \
 		} \
 	};
 
@@ -59,35 +40,10 @@
 	}
 */
 #define JSON5_MEMBERS(...) \
-	inline auto make_named_tuple() noexcept { \
-		return std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ )); } \
-	inline auto make_named_tuple() const noexcept { \
-		return std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ )); }
-
-/*
-	Generates members serialzation helper inside class with inheritance:
-
-	namespace foo {
-		struct Base {
-			std::string name;
-			JSON5_MEMBERS(name)
-		};
-
-		struct Bar : Base {
-			int x; float y; bool z;
-			JSON5_MEMBERS_INHERIT(Base, x, y, z)
-		};
-	}
-*/
-#define JSON5_MEMBERS_INHERIT(_Base, ...) \
-	inline auto make_named_tuple() noexcept { \
-		return std::tuple_cat( \
-		                       json5::detail::class_wrapper<_Base>::make_named_tuple(*this), \
-		                       std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
-	inline auto make_named_tuple() const noexcept { \
-		return std::tuple_cat( \
-		                       json5::detail::class_wrapper<_Base>::make_named_tuple(*this), \
-		                       std::tuple((const char*)#__VA_ARGS__, std::tie( __VA_ARGS__ ))); } \
+	inline auto make_named_ref_list() noexcept { \
+		return json5::detail::named_ref_list((const char*)#__VA_ARGS__, __VA_ARGS__); } \
+	inline auto make_named_ref_list() const noexcept { \
+		return json5::detail::named_ref_list((const char*)#__VA_ARGS__, __VA_ARGS__); }
 
 /*
 	Generates enum wrapper:
@@ -113,6 +69,19 @@ class builder;
 class document;
 class parser;
 class value;
+
+//---------------------------------------------------------------------------------------------------------------------
+struct location final
+{
+	unsigned line   : 24; // Source line number (1 = first, 0 = unknown line)
+	unsigned column :  8; // Source column number (1 = first, 0 = unknown column)
+	unsigned offset : 32; // Byte offset
+
+	location(): line( 0 ), column( 0 ), offset( 0 ) { }
+	location( unsigned l, unsigned c, unsigned off ): line( l ), column( c ), offset( off ) { }
+	
+	bool is_valid() const noexcept { return line > 0 && column > 0; }
+};
 
 //---------------------------------------------------------------------------------------------------------------------
 struct error final
@@ -144,10 +113,13 @@ struct error final
 		"number expected", "string expected", "object expected", "array expected",
 		"wrong array size", "invalid enum", "could not open stream",
 	};
-	
+
 	int type = none;
-	int line = 0;
-	int column = 0;
+	location loc = { };
+
+	error() = default;
+	error( int errType ) : type( errType ) { }
+	error( int errType, location l ): type( errType ), loc( l ) { }
 
 	operator int() const noexcept { return type; }
 };
@@ -163,6 +135,12 @@ struct writer_params
 
 	// Write all on single line, omit extra spaces
 	bool compact = false;
+
+	// Arrays of this size or less will be put on single line
+	size_t compact_array_size = 5;
+
+	// Objects of this size of less will be put on single line
+	size_t compact_object_size = 1;
 
 	// Write regular JSON (don't use any JSON5 features)
 	bool json_compatible = false;
@@ -185,69 +163,57 @@ namespace json5::detail {
 
 using string_offset = unsigned;
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <size_t I> struct index { static constexpr size_t value = I; };
+
+template <typename... Args> class ref_list { };
+
+template <> class ref_list<>
+{
+public:
+	ref_list() { }
+};
+
+template <typename Head, typename... Tail>
+class ref_list<Head, Tail...> : public ref_list<Tail... >
+{
+	Head &_value;
+
+public:
+	using base_t = ref_list<Tail...>;
+
+	static constexpr size_t length = sizeof...( Tail ) + 1;
+
+	template <size_t I> auto &get( index<I> tag ) { return base_t::get( index < I - 1 > () ); }
+	Head &get( index<0> ) { return _value; }
+
+	template <size_t I> const auto &get( index<I> tag ) const { return base_t::get( index < I - 1 > () ); }
+	const Head &get( index<0> ) const { return _value; }
+
+	ref_list( Head &head, Tail &... tail ): base_t( tail... ), _value( head ) { }
+};
+
+template <typename... Args> class named_ref_list : public ref_list<Args...>
+{
+	const char *_names = nullptr;
+
+public:
+	using base_t = ref_list<Args...>;
+
+	named_ref_list( const char *argNames, Args &... args ): base_t( args... ), _names( argNames ) { }
+
+	const char *names() const noexcept { return _names; }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <typename T> struct class_wrapper
 {
-	inline static auto make_named_tuple( T &in ) noexcept { return in.make_named_tuple(); }
-	inline static auto make_named_tuple( const T &in ) noexcept { return in.make_named_tuple(); }
+	inline static auto make_named_ref_list( T &in ) noexcept { return in.make_named_ref_list(); }
+	inline static auto make_named_ref_list( const T &in ) noexcept { return in.make_named_ref_list(); }
 };
 
 template <typename T> struct enum_table : std::false_type { };
 
-class char_source
-{
-public:
-	virtual ~char_source() = default;
-
-	virtual int next() = 0;
-	virtual int peek() = 0;
-	virtual bool eof() const = 0;
-
-	error make_error( int type ) const noexcept { return error{ type, _line, _column }; }
-
-protected:
-	int _line = 1;
-	int _column = 1;
-};
-
 } // namespace json5::detail
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/* Here be dragons... */
-
-#define _JSON5_EXPAND(...) __VA_ARGS__
-#define _JSON5_JOIN(X, Y) _JSON5_JOIN2(X, Y)
-#define _JSON5_JOIN2(X, Y) X##Y
-#define _JSON5_COUNT(...) _JSON5_EXPAND(_JSON5_COUNT2(__VA_ARGS__, \
-                                        16, 15, 14, 13, 12, 11, 10, 9, \
-                                        8, 7, 6, 5, 4, 3, 2, 1, ))
-
-#define _JSON5_COUNT2(_, \
-                      _16, _15, _14, _13, _12, _11, _10, _9, \
-                      _8, _7, _6, _5, _4, _3, _2, _X, ...) _X
-
-#define _JSON5_FIRST(...) _JSON5_EXPAND(_JSON5_FIRST2(__VA_ARGS__, ))
-#define _JSON5_FIRST2(X,...) X
-#define _JSON5_TAIL(...) _JSON5_EXPAND(_JSON5_TAIL2(__VA_ARGS__))
-#define _JSON5_TAIL2(X,...) (__VA_ARGS__)
-
-#define _JSON5_CONCAT(   _Prefix, _Args) _JSON5_JOIN(_JSON5_CONCAT_,_JSON5_COUNT _Args)(_Prefix, _Args)
-#define _JSON5_CONCAT_1( _Prefix, _Args) _Prefix _Args
-#define _JSON5_CONCAT_2( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_1( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_3( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_2( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_4( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_3( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_5( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_4( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_6( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_5( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_7( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_6( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_8( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_7( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_9( _Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_8( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_10(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_9( _Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_11(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_10(_Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_12(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_11(_Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_13(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_12(_Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_14(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_13(_Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_15(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_14(_Prefix,_JSON5_TAIL _Args)
-#define _JSON5_CONCAT_16(_Prefix, _Args) _Prefix(_JSON5_FIRST _Args),_JSON5_CONCAT_15(_Prefix,_JSON5_TAIL _Args)
-
-#define _JSON5_PREFIX_IN(_X) in. _X
-#define _JSON5_PREFIX_OUT(_X) out. _X

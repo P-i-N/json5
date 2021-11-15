@@ -18,7 +18,7 @@ class value
 {
 public:
 	// Construct null value
-	value() noexcept = default;
+	value() noexcept;
 
 	// Construct null value
 	value( std::nullptr_t ) noexcept : _data( type_null ) { }
@@ -35,6 +35,9 @@ public:
 	// Construct number value from double
 	value( double val ) noexcept : _double( val ) { }
 
+	// Construct string value from null-terminated string
+	value( const char *val ) noexcept : value( value_type::string, val ) { }
+
 	// Return value type
 	value_type type() const noexcept;
 
@@ -44,7 +47,7 @@ public:
 	// Checks, if value stores boolean. Use 'get_bool' for reading.
 	bool is_boolean() const noexcept { return _data == type_true || _data == type_false; }
 
-	// Checks, if value stores number. Use 'get' or 'try_get' for reading.
+	// Checks, if value stores number. Use 'get_number' or 'try_get_number' for reading.
 	bool is_number() const noexcept { return ( _data & mask_nanbits ) != mask_nanbits; }
 
 	// Checks, if value stores string. Use 'get_c_str' for reading.
@@ -58,6 +61,9 @@ public:
 	// to iterate over array elements.
 	bool is_array() const noexcept { return ( _data & mask_type ) == type_array; }
 
+	// Check, if this is a root document value and can be safely casted to json5::document
+	bool is_document() const noexcept { return ( _data & mask_is_document ) == mask_is_document; }
+
 	// Get stored bool. Returns 'defaultValue', if this value is not a boolean.
 	bool get_bool( bool defaultValue = false ) const noexcept;
 
@@ -66,14 +72,14 @@ public:
 
 	// Get stored number as type 'T'. Returns 'defaultValue', if this value is not a number.
 	template <typename T>
-	T get( T defaultValue = 0 ) const noexcept
+	T get_number( T defaultValue = 0 ) const noexcept
 	{
 		return is_number() ? T( _double ) : defaultValue;
 	}
 
 	// Try to get stored number as type 'T'. Returns false, if this value is not a number.
 	template <typename T>
-	bool try_get( T &out ) const noexcept
+	bool try_get_number( T &out ) const noexcept
 	{
 		if ( !is_number() )
 			return false;
@@ -100,11 +106,22 @@ public:
 	// Get value payload (lower 48bits of _data) converted to type 'T'
 	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
 
+	// Get location in the original file (line, column & byte offset)
+	location loc() const noexcept { return _loc; }
+
+	template <typename T>
+	[[deprecated( "Use get_number instead" )]]
+	T get( T defaultValue = 0 ) const noexcept { return get_number<T>( defaultValue ); }
+
+	template <typename T>
+	[[deprecated( "Use try_get_number" )]]
+	bool try_get( T &out ) const noexcept { return try_get_number( out ); }
+
 protected:
 	value( value_type t, uint64_t data );
 	value( value_type t, const void *data ) : value( t, reinterpret_cast<uint64_t>( data ) ) { }
 
-	void relink( const class document *prevDoc, const class document &doc ) noexcept;
+	void relink( const class document *prevDoc, class document &doc ) noexcept;
 
 	// NaN-boxed data
 	union
@@ -113,15 +130,20 @@ protected:
 		uint64_t _data;
 	};
 
-	static constexpr uint64_t mask_nanbits = 0xFFF0000000000000ull;
-	static constexpr uint64_t mask_type    = 0xFFFF000000000000ull;
-	static constexpr uint64_t mask_payload = 0x0000FFFFFFFFFFFFull;
-	static constexpr uint64_t type_null    = 0xFFFC000000000000ull;
-	static constexpr uint64_t type_false   = 0xFFF1000000000000ull;
-	static constexpr uint64_t type_true    = 0xFFF3000000000000ull;
-	static constexpr uint64_t type_string  = 0xFFF2000000000000ull;
-	static constexpr uint64_t type_array   = 0xFFF4000000000000ull;
-	static constexpr uint64_t type_object  = 0xFFF6000000000000ull;
+	// Location in source file
+	location _loc = { };
+
+	static constexpr uint64_t mask_nanbits     = 0xFFF0000000000000ull;
+	static constexpr uint64_t mask_type        = 0xFFF7000000000000ull;
+	static constexpr uint64_t mask_is_document = 0x0008000000000000ull;
+	static constexpr uint64_t mask_payload     = 0x0000FFFFFFFFFFFFull;
+	static constexpr uint64_t type_false       = 0xFFF1000000000000ull;
+	static constexpr uint64_t type_true        = 0xFFF2000000000000ull;
+	static constexpr uint64_t type_string      = 0xFFF3000000000000ull;
+	static constexpr uint64_t type_string_off  = 0xFFF4000000000000ull;
+	static constexpr uint64_t type_array       = 0xFFF5000000000000ull;
+	static constexpr uint64_t type_object      = 0xFFF6000000000000ull;
+	static constexpr uint64_t type_null        = 0xFFF7000000000000ull;
 
 	// Stores lower 48bits of uint64 as payload
 	void payload( uint64_t p ) noexcept { _data = ( _data & ~mask_payload ) | p; }
@@ -131,6 +153,7 @@ protected:
 
 	friend document;
 	friend builder;
+	friend parser;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -144,7 +167,7 @@ class document final : public value
 {
 public:
 	// Construct empty document
-	document() = default;
+	document() : value() { _data = value::type_null | value::mask_is_document; }
 
 	// Construct a document copy
 	document( const document &copy ) { assign_copy( copy ); }
@@ -159,6 +182,10 @@ public:
 	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); return *this; }
 
 private:
+	detail::string_offset alloc_string( const char *str, size_t length = size_t(-1) );
+
+	void reset() noexcept;
+
 	void assign_copy( const document &copy );
 	void assign_rvalue( document &&rValue ) noexcept;
 	void assign_root( value root ) noexcept;
@@ -187,11 +214,17 @@ public:
 	// this object_view will be created empty (and invalid)
 	object_view( const value &v ) noexcept
 		: _pair( v.is_object() ? ( v.payload<const value*>() + 1 ) : nullptr )
-		, _count( _pair ? ( _pair[-1].get<size_t>() / 2 ) : 0 )
+		, _count( _pair ? ( _pair[-1].get_number<size_t>() / 2 ) : 0 )
 	{ }
 
 	// Checks, if object view was constructed from valid value
 	bool is_valid() const noexcept { return _pair != nullptr; }
+
+	// Source JSON value (first key value in first key-value pair)
+	const value *source() const noexcept { return _pair; }
+
+	// Location of the source value, returns invalid location for invalid view
+	location loc() const noexcept { return _pair ? _pair->loc() : location(); }
 
 	using key_value_pair = std::pair<const char *, value>;
 
@@ -248,11 +281,17 @@ public:
 	// this array_view will be created empty (and invalid)
 	array_view( const value &v ) noexcept
 		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
-		, _count( _value ? _value[-1].get<size_t>() : 0 )
+		, _count( _value ? _value[-1].get_number<size_t>() : 0 )
 	{ }
 
 	// Checks, if array view was constructed from valid value
 	bool is_valid() const noexcept { return _value != nullptr; }
+
+	// Source JSON value (first array item)
+	const value *source() const noexcept { return _value; }
+
+	// Location of the source value, returns invalid location for invalid view
+	location loc() const noexcept { return _value ? _value->loc() : location(); }
 
 	using iterator = const value*;
 
@@ -273,6 +312,13 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
+inline value::value() noexcept
+	: _data(0)
+{
+
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline value::value( value_type t, uint64_t data )
 {
 	if ( t == value_type::object )
@@ -282,7 +328,7 @@ inline value::value( value_type t, uint64_t data )
 	else if ( t == value_type::string )
 		_data = type_string | data;
 	else
-		_data = type_null;
+		_data = data;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -363,14 +409,30 @@ inline value value::operator[]( size_t index ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void value::relink( const class document *prevDoc, const class document &doc ) noexcept
+inline void value::relink( const class document *prevDoc, class document &doc ) noexcept
 {
-	if ( is_string() )
+	if ( ( _data & mask_type ) == type_string_off )
+	{
+		payload( doc._strings.data() + payload<uint64_t>() );
+
+		_data &= ~mask_type;
+		_data |= type_string;
+	}
+	else if ( ( _data & mask_type ) == type_string )
 	{
 		if ( prevDoc )
-			payload( payload<const char *>() - prevDoc->_strings.data() );
-
-		payload( doc._strings.data() + payload<uint64_t>() );
+		{
+			auto prevOffset = payload<const char *>() - prevDoc->_strings.data();
+			payload( doc._strings.data() + prevOffset );
+		}
+		else
+		{
+			if (auto* str = get_c_str(); str < doc._strings.data() || str >= doc._strings.data() + doc._strings.size())
+			{
+				auto newOffset = doc.alloc_string(str);
+				payload(doc._strings.data() + newOffset);
+			}
+		}
 	}
 	else if ( is_object() || is_array() )
 	{
@@ -379,6 +441,30 @@ inline void value::relink( const class document *prevDoc, const class document &
 
 		payload( doc._values.data() + payload<uint64_t>() );
 	}
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline detail::string_offset document::alloc_string( const char* str, size_t length )
+{
+	if ( length == size_t(-1) )
+		length = str ? strlen( str ) : 0;
+
+	if ( !str || !length )
+		return 0;
+
+	auto result = detail::string_offset(_strings.size());
+	_strings.append( str, length );
+	_strings.push_back( 0 );
+	return result;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline void document::reset() noexcept
+{
+	_data = value::type_null | value::mask_is_document;
+	_values.clear();
+	_strings.clear();
+	_strings.push_back(0);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -411,7 +497,7 @@ inline void document::assign_rvalue( document &&rValue ) noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline void document::assign_root( value root ) noexcept
 {
-	_data = root._data;
+	_data = root._data | mask_is_document;
 
 	for ( auto &v : _values )
 		v.relink( nullptr, *this );
@@ -448,13 +534,13 @@ inline bool object_view::operator==( const object_view &other ) const noexcept
 	if ( empty() )
 		return true;
 
-	static constexpr size_t stack_pair_count = 256;
+	static constexpr size_t stack_pair_count = 64;
 	key_value_pair tempPairs1[stack_pair_count];
 	key_value_pair tempPairs2[stack_pair_count];
 	key_value_pair *pairs1 = _count <= stack_pair_count ? tempPairs1 : new key_value_pair[_count];
 	key_value_pair *pairs2 = _count <= stack_pair_count ? tempPairs2 : new key_value_pair[_count];
-	{ size_t i = 0; for ( const auto kvp : *this ) pairs1[i++] = kvp; }
-	{ size_t i = 0; for ( const auto kvp : other ) pairs2[i++] = kvp; }
+	{ size_t i = 0; for ( const auto &kvp : *this ) pairs1[i++] = kvp; }
+	{ size_t i = 0; for ( const auto &kvp : other ) pairs2[i++] = kvp; }
 
 	const auto comp = []( const key_value_pair & a, const key_value_pair & b ) noexcept -> bool
 	{ return strcmp( a.first, b.first ) < 0; };
