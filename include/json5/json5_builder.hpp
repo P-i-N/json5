@@ -78,10 +78,7 @@ inline detail::string_offset builder::string_buffer_offset() const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline detail::string_offset builder::string_buffer_add( string_view str )
 {
-	auto offset = string_buffer_offset();
-	_doc._strings += str;
-	_doc._strings.push_back( 0 );
-	return offset;
+	return _doc.alloc_string( str.data(), str.size() );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -91,42 +88,42 @@ inline void builder::string_buffer_add_utf8( uint32_t ch )
 
 	if ( 0 <= ch && ch <= 0x7f )
 	{
-		s += char( ch );
+		s.push_back( uint8_t(ch) );
 	}
 	else if ( 0x80 <= ch && ch <= 0x7ff )
 	{
-		s += char( 0xc0 | ( ch >> 6 ) );
-		s += char( 0x80 | ( ch & 0x3f ) );
+		s.push_back( uint8_t( 0xc0 | ( ch >> 6 ) ) );
+		s.push_back( uint8_t( 0x80 | ( ch & 0x3f ) ) );
 	}
 	else if ( 0x800 <= ch && ch <= 0xffff )
 	{
-		s += char( 0xe0 | ( ch >> 12 ) );
-		s += char( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
-		s += char( 0x80 | ( ch & 0x3f ) );
+		s.push_back( uint8_t( 0xe0 | ( ch >> 12 ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 6 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ch & 0x3f ) ) );
 	}
 	else if ( 0x10000 <= ch && ch <= 0x1fffff )
 	{
-		s += char( 0xf0 | ( ch >> 18 ) );
-		s += char( 0x80 | ( ( ch >> 12 ) & 0x3f ) );
-		s += char( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
-		s += char( 0x80 | ( ch & 0x3f ) );
+		s.push_back( uint8_t( 0xf0 | ( ch >> 18 ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 12 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 6 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ch & 0x3f ) ) );
 	}
 	else if ( 0x200000 <= ch && ch <= 0x3ffffff )
 	{
-		s += char( 0xf8 | ( ch >> 24 ) );
-		s += char( 0x80 | ( ( ch >> 18 ) & 0x3f ) );
-		s += char( 0x80 | ( ( ch >> 12 ) & 0x3f ) );
-		s += char( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
-		s += char( 0x80 | ( ch & 0x3f ) );
+		s.push_back( uint8_t( 0xf8 | ( ch >> 24 ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 18 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 12 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 6 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ch & 0x3f ) ) );
 	}
 	else if ( 0x4000000 <= ch && ch <= 0x7fffffff )
 	{
-		s += char( 0xfc | ( ch >> 30 ) );
-		s += char( 0x80 | ( ( ch >> 24 ) & 0x3f ) );
-		s += char( 0x80 | ( ( ch >> 18 ) & 0x3f ) );
-		s += char( 0x80 | ( ( ch >> 12 ) & 0x3f ) );
-		s += char( 0x80 | ( ( ch >> 6 ) & 0x3f ) );
-		s += char( 0x80 | ( ch & 0x3f ) );
+		s.push_back( uint8_t( 0xfc | ( ch >> 30 ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 24 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 18 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 12 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ( ch >> 6 ) & 0x3f ) ) );
+		s.push_back( uint8_t( 0x80 | ( ch & 0x3f ) ) );
 	}
 }
 

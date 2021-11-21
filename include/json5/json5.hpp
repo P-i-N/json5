@@ -3,14 +3,17 @@
 #include "json5_base.hpp"
 
 #if !defined(JSON5_DO_NOT_USE_STL)
-#include <string>
-#include <vector>
-namespace json5 {
-using string = std::string;
-using string_view = std::string_view;
-}
-#else
+	#include <string>
+	#include <vector>
+	#define _JSON5_MOVE std::move
+	#define _JSON5_FORWARD std::forward
+
+	namespace json5 {
+		using string_view = std::string_view;
+	} // namespace json5
 #endif
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace json5 {
 
@@ -23,7 +26,7 @@ class value
 {
 public:
 	// Construct null value
-	value() noexcept;
+	value() noexcept : _data( type_null ) { }
 
 	// Construct null value
 	value( std::nullptr_t ) noexcept : _data( type_null ) { }
@@ -90,8 +93,9 @@ public:
 		return true;
 	}
 
-	// Equality test against another value. Note that this might be a very expensive operation
-	// for large nested JSON objects!
+	// Equality test against another value. Note that this DOES NOT DO a deep equality test
+	// for JSON objects nor a item-by-item equality test for arrays - only references are
+	// compared for objects or arrays.
 	bool operator==( const value &other ) const noexcept;
 
 	// Non-equality test
@@ -175,24 +179,28 @@ public:
 	document( const document &copy ) { assign_copy( copy ); }
 
 	// Construct a document from r-value
-	document( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); }
+	document( document &&rValue ) noexcept { assign_rvalue( _JSON5_FORWARD<document>( rValue ) ); }
 
 	// Copy data from another document (does a deep copy)
 	document &operator=( const document &copy ) { assign_copy( copy ); return *this; }
 
 	// Assign data from r-value (does a swap)
-	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::move( rValue ) ); return *this; }
+	document &operator=( document &&rValue ) noexcept { assign_rvalue( _JSON5_FORWARD<document>( rValue ) ); return *this; }
 
 private:
 	detail::string_offset alloc_string( const char *str, size_t length = size_t( -1 ) );
 
 	void reset() noexcept;
 
+	void convert_string_offsets();
+
 	void assign_copy( const document &copy );
 	void assign_rvalue( document &&rValue ) noexcept;
 	void assign_root( value root ) noexcept;
 
-	string _strings;
+	const char* strings_data() const noexcept { return reinterpret_cast<const char*>( _strings.data() ); }
+
+	std::vector<uint8_t> _strings;
 	std::vector<value> _values;
 
 	friend value;
@@ -230,8 +238,8 @@ public:
 
 	struct key_value_pair
 	{
-		string_view first = string_view();
-		value second = value();
+		const char* first;
+		value second;
 	};
 
 	class iterator final
@@ -241,7 +249,7 @@ public:
 		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
 		iterator &operator++() noexcept { _pair += 2; return *this; }
-		key_value_pair operator*() const noexcept { return key_value_pair( _pair[0].get_c_str(), _pair[1] ); }
+		key_value_pair operator*() const noexcept { return { _pair[0].get_c_str(), _pair[1] }; }
 
 	private:
 		const value *_pair = nullptr;
@@ -261,14 +269,9 @@ public:
 
 	// True, when object is empty
 	bool empty() const noexcept { return size() == 0; }
-
-	// Returns value associated with specified key or invalid value, when key is not found
 	value operator[]( string_view key ) const noexcept;
 
-	// Returns key-value pair at specified index
-	key_value_pair operator[]( size_t index ) const noexcept;
-
-	bool operator==( const object_view &other ) const noexcept;
+	bool operator==( const object_view &other ) const noexcept { return _pair == other._pair; }
 	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
 
 private:
@@ -313,7 +316,7 @@ public:
 	bool empty() const noexcept { return _count == 0; }
 	value operator[]( size_t index ) const noexcept;
 
-	bool operator==( const array_view &other ) const noexcept;
+	bool operator==( const array_view &other ) const noexcept { return _value == other._value; }
 	bool operator!=( const array_view &other ) const noexcept { return !( ( *this ) == other ); }
 
 private:
@@ -322,13 +325,6 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//---------------------------------------------------------------------------------------------------------------------
-inline value::value() noexcept
-	: _data( 0 )
-{
-
-}
 
 //---------------------------------------------------------------------------------------------------------------------
 inline value::value( value_type t, uint64_t data )
@@ -423,28 +419,20 @@ inline value value::operator[]( size_t index ) const noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline void value::relink( const class document *prevDoc, class document &doc ) noexcept
 {
-	if ( ( _data & mask_type ) == type_string_off )
-	{
-		payload( doc._strings.data() + payload<uint64_t>() );
-
-		_data &= ~mask_type;
-		_data |= type_string;
-	}
-	else if ( ( _data & mask_type ) == type_string )
+	if ( ( _data & mask_type ) == type_string )
 	{
 		if ( prevDoc )
-		{
-			auto prevOffset = payload<const char *>() - prevDoc->_strings.data();
-			payload( doc._strings.data() + prevOffset );
-		}
+			payload( payload<const char*>() - prevDoc->strings_data() );
 		else
 		{
-			if ( auto *str = get_c_str(); str < doc._strings.data() || str >= doc._strings.data() + doc._strings.size() )
-			{
-				auto newOffset = doc.alloc_string( str );
-				payload( doc._strings.data() + newOffset );
-			}
+			if ( auto* str = get_c_str(); str < doc.strings_data() || str >= doc.strings_data() + doc._strings.size() )
+				payload( doc.alloc_string( str ) );
+			else
+				payload( payload<const char*>() - doc.strings_data() );
 		}
+
+		_data &= ~mask_type;
+		_data |= type_string_off;
 	}
 	else if ( is_object() || is_array() )
 	{
@@ -465,8 +453,10 @@ inline detail::string_offset document::alloc_string( const char *str, size_t len
 		return 0;
 
 	auto result = detail::string_offset( _strings.size() );
-	_strings.append( str, length );
-	_strings.push_back( 0 );
+
+	_strings.resize( _strings.size() + length + 1 );
+	memcpy( _strings.data() + result, str, length );
+	_strings[result + length] = 0;
 	return result;
 }
 
@@ -480,6 +470,20 @@ inline void document::reset() noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline void document::convert_string_offsets()
+{
+	for ( auto& v : _values )
+	{
+		if ( ( v._data & mask_type) == type_string_off )
+		{
+			v.payload( strings_data() + v.payload<uint64_t>() );
+			v._data &= ~mask_type;
+			v._data |= type_string;
+		}
+	}
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline void document::assign_copy( const document &copy )
 {
 	_data = copy._data;
@@ -490,20 +494,20 @@ inline void document::assign_copy( const document &copy )
 		v.relink( &copy, *this );
 
 	relink( &copy, *this );
+	convert_string_offsets();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline void document::assign_rvalue( document &&rValue ) noexcept
 {
-	_data = std::move( rValue._data );
-	_strings = std::move( rValue._strings );
-	_values = std::move( rValue._values );
+	_data = _JSON5_MOVE( rValue._data );
+	_strings = _JSON5_MOVE( rValue._strings );
+	_values = _JSON5_MOVE( rValue._values );
 
 	for ( auto &v : _values )
 		v.relink( &rValue, *this );
 
-	for ( auto &v : rValue._values )
-		v.relink( this, rValue );
+	convert_string_offsets();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -515,6 +519,7 @@ inline void document::assign_root( value root ) noexcept
 		v.relink( nullptr, *this );
 
 	relink( nullptr, *this );
+	convert_string_offsets();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -538,53 +543,9 @@ inline value object_view::operator[]( string_view key ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline object_view::key_value_pair object_view::operator[]( size_t index ) const noexcept
-{
-	if ( index >= _count )
-		return key_value_pair();
-
-	return { _pair[index * 2].get_c_str(), _pair[index * 2 + 1] };
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline bool object_view::operator==( const object_view &other ) const noexcept
-{
-	if ( size() != other.size() )
-		return false;
-
-	if ( empty() )
-		return true;
-
-	for ( size_t i = 0, S = _count * 2; i < S; i += 2 )
-	{
-		if ( _pair[i] != other._pair[i] )
-			return false;
-
-		if ( _pair[i + 1] != other._pair[i + 1] )
-			return false;
-	}
-
-	return true;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
 inline value array_view::operator[]( size_t index ) const noexcept
 {
 	return ( index < _count ) ? _value[index] : value();
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline bool array_view::operator==( const array_view &other ) const noexcept
-{
-	if ( size() != other.size() )
-		return false;
-
-	auto iter = begin();
-	for ( const auto &v : other )
-		if ( *iter++ != v )
-			return false;
-
-	return true;
 }
 
 } // namespace json5
