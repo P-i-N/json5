@@ -37,6 +37,12 @@ template <typename T> error from_file( std::string_view fileName, T &out );
 
 namespace detail {
 
+template <typename T> struct is_optional : public std::false_type { };
+
+template <typename T> struct is_optional<std::optional<T>> : public std::true_type { };
+
+template <typename T> constexpr static bool is_optional_v = is_optional<T>::value;
+
 // Pre-declare so compiler knows it exists before it is attempted to be used
 template <typename T> error read(const json5::value& in, T& out);
 
@@ -153,7 +159,12 @@ inline json5::value write_enum( writer &w, T in )
 template <typename Type>
 inline void write_tuple_value(writer& w, std::string_view name, const Type& in)
 {
-	if constexpr ( std::is_enum_v<Type> )
+	if constexpr (is_optional_v<Type>)
+	{
+		if (in)
+			write_tuple_value<typename Type::value_type>(w, name, *in);
+	}
+	else if constexpr (std::is_enum_v<Type>)
 	{
 		if constexpr ( enum_table<Type>() )
 			w[name] = write_enum( w, in );
@@ -360,7 +371,20 @@ inline error read_enum( const json5::value &in, T &out )
 template <typename Type>
 inline error read_tuple_value( const json5::object_view::iterator iter, Type &out )
 {
-	if constexpr ( std::is_enum_v<Type> )
+	if constexpr (is_optional_v<Type>)
+	{
+    if ((*iter).second.is_null())
+    {
+			out = std::nullopt;
+    }
+    else
+    {
+		out = typename Type::value_type();
+		if (auto err = read_tuple_value<typename Type::value_type>(iter, *out))
+			return err;
+	}
+  }
+	else if constexpr (std::is_enum_v<Type>)
 	{
 		if constexpr ( enum_table<Type>() )
 		{
