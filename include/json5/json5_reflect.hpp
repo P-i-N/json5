@@ -150,6 +150,21 @@ inline json5::value write_enum( writer &w, T in )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+template <typename Type>
+inline void write_tuple_value(writer& w, std::string_view name, const Type& in)
+{
+	if constexpr ( std::is_enum_v<Type> )
+	{
+		if constexpr ( enum_table<Type>() )
+			w[name] = write_enum( w, in );
+		else
+			w[name] = write( w, std::underlying_type_t<Type>( in ) );
+	}
+	else
+		w[name] = write( w, in );
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 template <size_t Index = 0, typename... Types>
 inline void write_tuple( writer &w, const char *names, const std::tuple<Types...> &t )
 {
@@ -158,15 +173,7 @@ inline void write_tuple( writer &w, const char *names, const std::tuple<Types...
 
 	if ( auto name = get_name_slice( names, Index ); !name.empty() )
 	{
-		if constexpr ( std::is_enum_v<Type> )
-		{
-			if constexpr ( enum_table<Type>() )
-				w[name] = write_enum( w, in );
-			else
-				w[name] = write( w, std::underlying_type_t<Type>( in ) );
-		}
-		else
-			w[name] = write( w, in );
+		write_tuple_value<Type>(w, name, in);
 	}
 
 	if constexpr ( Index + 1 != sizeof...( Types ) )
@@ -350,6 +357,35 @@ inline error read_enum( const json5::value &in, T &out )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+template <typename Type>
+inline error read_tuple_value( const json5::object_view::iterator iter, Type &out )
+{
+	if constexpr ( std::is_enum_v<Type> )
+	{
+		if constexpr ( enum_table<Type>() )
+		{
+			if ( auto err = read_enum( ( *iter ).second, out ) )
+				return err;
+		}
+		else
+		{
+			std::underlying_type_t<Type> temp;
+			if ( auto err = read( ( *iter ).second, temp ) )
+				return err;
+
+			out = Type( temp );
+		}
+	}
+	else
+	{
+		if ( auto err = read( ( *iter ).second, out ) )
+			return err;
+	}
+
+	return { error::none };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 template <size_t Index = 0, typename... Types>
 inline error read_tuple( const json5::object_view &obj, const char *names, std::tuple<Types...> &t )
 {
@@ -361,27 +397,8 @@ inline error read_tuple( const json5::object_view &obj, const char *names, std::
 	auto iter = obj.find( name );
 	if ( iter != obj.end() )
 	{
-		if constexpr ( std::is_enum_v<Type> )
-		{
-			if constexpr ( enum_table<Type>() )
-			{
-				if ( auto err = read_enum( ( *iter ).second, out ) )
-					return err;
-			}
-			else
-			{
-				std::underlying_type_t<Type> temp;
-				if ( auto err = read( ( *iter ).second, temp ) )
-					return err;
-
-				out = Type( temp );
-			}
-		}
-		else
-		{
-			if ( auto err = read( ( *iter ).second, out ) )
-				return err;
-		}
+		if ( auto err = read_tuple_value<Type>( iter, out ) )
+			return err;
 	}
 
 	if constexpr ( Index + 1 != sizeof...( Types ) )
