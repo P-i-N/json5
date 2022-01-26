@@ -2,7 +2,6 @@
 
 #include "json5_base.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -182,7 +181,7 @@ public:
 	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); return *this; }
 
 private:
-	detail::string_offset alloc_string( const char *str, size_t length = size_t(-1) );
+	detail::string_offset alloc_string( const char *str, size_t length = size_t( -1 ) );
 
 	void reset() noexcept;
 
@@ -226,7 +225,11 @@ public:
 	// Location of the source value, returns invalid location for invalid view
 	location loc() const noexcept { return _pair ? _pair->loc() : location(); }
 
-	using key_value_pair = std::pair<const char *, value>;
+	struct key_value_pair
+	{
+		std::string_view first = std::string_view();
+		value second = value();
+	};
 
 	class iterator final
 	{
@@ -253,8 +256,14 @@ public:
 	// Get number of key-value pairs
 	size_t size() const noexcept { return _count; }
 
+	// True, when object is empty
 	bool empty() const noexcept { return size() == 0; }
+
+	// Returns value associated with specified key or invalid value, when key is not found
 	value operator[]( std::string_view key ) const noexcept;
+
+	// Returns key-value pair at specified index
+	key_value_pair operator[]( size_t index ) const noexcept;
 
 	bool operator==( const object_view &other ) const noexcept;
 	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
@@ -313,7 +322,7 @@ private:
 
 //---------------------------------------------------------------------------------------------------------------------
 inline value::value() noexcept
-	: _data(0)
+	: _data( 0 )
 {
 
 }
@@ -427,10 +436,10 @@ inline void value::relink( const class document *prevDoc, class document &doc ) 
 		}
 		else
 		{
-			if (auto* str = get_c_str(); str < doc._strings.data() || str >= doc._strings.data() + doc._strings.size())
+			if ( auto *str = get_c_str(); str < doc._strings.data() || str >= doc._strings.data() + doc._strings.size() )
 			{
-				auto newOffset = doc.alloc_string(str);
-				payload(doc._strings.data() + newOffset);
+				auto newOffset = doc.alloc_string( str );
+				payload( doc._strings.data() + newOffset );
 			}
 		}
 	}
@@ -444,15 +453,15 @@ inline void value::relink( const class document *prevDoc, class document &doc ) 
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline detail::string_offset document::alloc_string( const char* str, size_t length )
+inline detail::string_offset document::alloc_string( const char *str, size_t length )
 {
-	if ( length == size_t(-1) )
+	if ( length == size_t( -1 ) )
 		length = str ? strlen( str ) : 0;
 
 	if ( !str || !length )
 		return 0;
 
-	auto result = detail::string_offset(_strings.size());
+	auto result = detail::string_offset( _strings.size() );
 	_strings.append( str, length );
 	_strings.push_back( 0 );
 	return result;
@@ -464,7 +473,7 @@ inline void document::reset() noexcept
 	_data = value::type_null | value::mask_is_document;
 	_values.clear();
 	_strings.clear();
-	_strings.push_back(0);
+	_strings.push_back( 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -526,6 +535,15 @@ inline value object_view::operator[]( std::string_view key ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+inline object_view::key_value_pair object_view::operator[]( size_t index ) const noexcept
+{
+	if ( index >= _count )
+		return key_value_pair();
+
+	return { _pair[index * 2].get_c_str(), _pair[index * 2 + 1] };
+}
+
+//---------------------------------------------------------------------------------------------------------------------
 inline bool object_view::operator==( const object_view &other ) const noexcept
 {
 	if ( size() != other.size() )
@@ -534,32 +552,16 @@ inline bool object_view::operator==( const object_view &other ) const noexcept
 	if ( empty() )
 		return true;
 
-	static constexpr size_t stack_pair_count = 64;
-	key_value_pair tempPairs1[stack_pair_count];
-	key_value_pair tempPairs2[stack_pair_count];
-	key_value_pair *pairs1 = _count <= stack_pair_count ? tempPairs1 : new key_value_pair[_count];
-	key_value_pair *pairs2 = _count <= stack_pair_count ? tempPairs2 : new key_value_pair[_count];
-	{ size_t i = 0; for ( const auto &kvp : *this ) pairs1[i++] = kvp; }
-	{ size_t i = 0; for ( const auto &kvp : other ) pairs2[i++] = kvp; }
-
-	const auto comp = []( const key_value_pair & a, const key_value_pair & b ) noexcept -> bool
-	{ return strcmp( a.first, b.first ) < 0; };
-
-	std::sort( pairs1, pairs1 + _count, comp );
-	std::sort( pairs2, pairs2 + _count, comp );
-
-	bool result = true;
-	for ( size_t i = 0; i < _count; ++i )
+	for ( size_t i = 0, S = _count * 2; i < S; i += 2 )
 	{
-		if ( strcmp( pairs1[i].first, pairs2[i].first ) || pairs1[i].second != pairs2[i].second )
-		{
-			result = false;
-			break;
-		}
+		if ( _pair[i] != other._pair[i] )
+			return false;
+
+		if ( _pair[i + 1] != other._pair[i + 1] )
+			return false;
 	}
 
-	if ( _count > stack_pair_count ) { delete[] pairs1; delete[] pairs2; }
-	return result;
+	return true;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
