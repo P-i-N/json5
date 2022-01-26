@@ -33,7 +33,7 @@ private:
 	{
 		unknown, identifier, string, number, colon, comma,
 		object_begin, object_end, array_begin, array_end,
-		literal_true, literal_false, literal_null
+		literal_true, literal_false, literal_null, literal_NaN
 	};
 
 	error parse_value( value &result );
@@ -152,6 +152,8 @@ inline error parser::parse_value( value &result )
 					result = value( false );
 				else if ( lit == token_type::literal_null )
 					result = value();
+				else if ( lit == token_type::literal_NaN )
+					result = value( NAN );
 				else
 					return make_error( error::invalid_literal );
 			}
@@ -248,7 +250,7 @@ inline error parser::parse_object()
 		value key = new_string( keyOffset );
 		key._loc = keyLoc;
 
-		(*this)( key, newValue );
+		( *this )( key, newValue );
 		expectComma = true;
 	}
 
@@ -507,6 +509,11 @@ inline error parser::parse_literal( token_type &result )
 {
 	int ch = peek();
 
+	if ( _loc.offset >= 99325679 )
+	{
+		ch = ch * 1;
+	}
+
 	// "true"
 	if ( ch == 't' )
 	{
@@ -531,6 +538,15 @@ inline error parser::parse_literal( token_type &result )
 		if ( next() && next() == 'u' && next() == 'l' && next() == 'l' )
 		{
 			result = token_type::literal_null;
+			return { error::none };
+		}
+	}
+	// "NaN"
+	else if ( ch == 'N' )
+	{
+		if ( next() && next() == 'a' && next() == 'N' )
+		{
+			result = token_type::literal_NaN;
 			return { error::none };
 		}
 	}
