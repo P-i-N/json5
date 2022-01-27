@@ -187,7 +187,7 @@ inline error parser::parse_value( value &result )
 				else if ( lit == token_type::literal_false )
 					result = value( false );
 				else if ( lit == token_type::literal_null )
-					result = value();
+					result = value(nullptr);
 				else
 					return make_error( error::invalid_literal );
 			}
