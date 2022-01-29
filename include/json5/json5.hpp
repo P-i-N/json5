@@ -2,9 +2,15 @@
 
 #include "json5_base.hpp"
 
-#include <cstdint>
+#if !defined(JSON5_DO_NOT_USE_STL)
 #include <string>
 #include <vector>
+namespace json5 {
+using string = std::string;
+using string_view = std::string_view;
+}
+#else
+#endif
 
 namespace json5 {
 
@@ -27,9 +33,6 @@ public:
 
 	// Construct number value from int (will be converted to double)
 	value( int val ) noexcept : _double( val ) { }
-
-	// Construct number value from float (will be converted to double)
-	value( float val ) noexcept : _double( val ) { }
 
 	// Construct number value from double
 	value( double val ) noexcept : _double( val ) { }
@@ -96,7 +99,7 @@ public:
 
 	// Use value as JSON object and get property value under 'key'. If this value
 	// is not an object or 'key' is not found, null value is always returned.
-	value operator[]( std::string_view key ) const noexcept;
+	value operator[]( string_view key ) const noexcept;
 
 	// Use value as JSON array and get item at 'index'. If this value is not
 	// an array or index is out of bounds, null value is returned.
@@ -178,7 +181,7 @@ public:
 	document &operator=( const document &copy ) { assign_copy( copy ); return *this; }
 
 	// Assign data from r-value (does a swap)
-	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::forward<document>( rValue ) ); return *this; }
+	document &operator=( document &&rValue ) noexcept { assign_rvalue( std::move( rValue ) ); return *this; }
 
 private:
 	detail::string_offset alloc_string( const char *str, size_t length = size_t( -1 ) );
@@ -189,7 +192,7 @@ private:
 	void assign_rvalue( document &&rValue ) noexcept;
 	void assign_root( value root ) noexcept;
 
-	std::string _strings;
+	string _strings;
 	std::vector<value> _values;
 
 	friend value;
@@ -227,7 +230,7 @@ public:
 
 	struct key_value_pair
 	{
-		std::string_view first = std::string_view();
+		string_view first = string_view();
 		value second = value();
 	};
 
@@ -251,7 +254,7 @@ public:
 	iterator end() const noexcept { return iterator( _pair + _count * 2 ); }
 
 	// Find property value with 'key'. Returns end iterator, when not found.
-	iterator find( std::string_view key ) const noexcept;
+	iterator find( string_view key ) const noexcept;
 
 	// Get number of key-value pairs
 	size_t size() const noexcept { return _count; }
@@ -260,7 +263,7 @@ public:
 	bool empty() const noexcept { return size() == 0; }
 
 	// Returns value associated with specified key or invalid value, when key is not found
-	value operator[]( std::string_view key ) const noexcept;
+	value operator[]( string_view key ) const noexcept;
 
 	// Returns key-value pair at specified index
 	key_value_pair operator[]( size_t index ) const noexcept;
@@ -387,7 +390,7 @@ inline bool value::operator==( const value &other ) const noexcept
 		else if ( t == value_type::number )
 			return _double == other._double;
 		else if ( t == value_type::string )
-			return std::string_view( payload<const char *>() ) == std::string_view( other.payload<const char *>() );
+			return string_view( payload<const char *>() ) == string_view( other.payload<const char *>() );
 		else if ( t == value_type::array )
 			return array_view( *this ) == array_view( other );
 		else if ( t == value_type::object )
@@ -398,7 +401,7 @@ inline bool value::operator==( const value &other ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value value::operator[]( std::string_view key ) const noexcept
+inline value value::operator[]( string_view key ) const noexcept
 {
 	if ( !is_object() )
 		return value();
@@ -515,7 +518,7 @@ inline void document::assign_root( value root ) noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline object_view::iterator object_view::find( std::string_view key ) const noexcept
+inline object_view::iterator object_view::find( string_view key ) const noexcept
 {
 	if ( !key.empty() )
 	{
@@ -528,7 +531,7 @@ inline object_view::iterator object_view::find( std::string_view key ) const noe
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value object_view::operator[]( std::string_view key ) const noexcept
+inline value object_view::operator[]( string_view key ) const noexcept
 {
 	const auto iter = find( key );
 	return ( iter != end() ) ? ( *iter ).second : value();

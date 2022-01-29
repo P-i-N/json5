@@ -12,16 +12,16 @@ namespace json5 {
 template <typename T> void to_document( document &doc, const T &in, const writer_params &wp = writer_params() );
 
 //
-template <typename T> void to_string( std::string &str, const T &in, const writer_params &wp = writer_params() );
+template <typename T> void to_string( string &str, const T &in, const writer_params &wp = writer_params() );
 
 //
-template <typename T> std::string to_string( const T &in, const writer_params &wp = writer_params() );
+template <typename T> string to_string( const T &in, const writer_params &wp = writer_params() );
 
 //
 template <typename T> error from_document( const document &doc, T &out );
 
 //
-template <typename T> error from_string( std::string_view str, T &out );
+template <typename T> error from_string( string_view str, T &out );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +42,7 @@ private:
 };
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string_view get_name_slice( const char *names, size_t index )
+inline string_view get_name_slice( const char *names, size_t index )
 {
 	size_t numCommas = index;
 	while ( numCommas > 0 && *names )
@@ -56,7 +56,7 @@ inline std::string_view get_name_slice( const char *names, size_t index )
 	while ( names[length] > 32 && names[length] != ',' )
 		++length;
 
-	return std::string_view( names, length );
+	return string_view( names, length );
 }
 
 /* Forward declarations */
@@ -69,7 +69,7 @@ inline json5::value write( writer &w, unsigned in ) { return json5::value( doubl
 inline json5::value write( writer &w, float in ) { return json5::value( double( in ) ); }
 inline json5::value write( writer &w, double in ) { return json5::value( in ); }
 inline json5::value write( writer &w, const char *in ) { return w.new_string( in ); }
-inline json5::value write( writer &w, const std::string &in ) { return w.new_string( in ); }
+inline json5::value write( writer &w, const string &in ) { return w.new_string( in ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
@@ -101,8 +101,8 @@ inline json5::value write_map( writer &w, const T &in )
 {
 	w.push_object();
 
-	for ( const auto &kvp : in )
-		w[kvp.first] = write( w, kvp.second );
+	for ( const auto &[k, v] : in )
+		w[k] = write( w, v );
 
 	return w.pop();
 }
@@ -151,12 +151,12 @@ inline void write( writer &w, const json5::detail::named_ref_list<Types...> &t )
 		if constexpr ( std::is_enum_v<Type> )
 		{
 			if constexpr ( enum_table<Type>() )
-				w[name] = write_enum(w, in);
+				w[name] = write_enum( w, in );
 			else
-				w[name] = write(w, std::underlying_type_t<Type>(in));
+				w[name] = write( w, std::underlying_type_t<Type>( in ) );
 		}
 		else
-			w[name] = write(w, in);
+			w[name] = write( w, in );
 	}
 
 	if constexpr ( Index + 1 != sizeof...( Types ) )
@@ -211,7 +211,7 @@ inline error read( const json5::value &in, const char *&out )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, std::string &out )
+inline error read( const json5::value &in, string &out )
 {
 	if ( !in.is_string() )
 		return { error::string_expected, in.loc() };
@@ -420,7 +420,7 @@ inline void to_document( document &doc, const T &in, const writer_params &wp )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline void to_string( std::string &str, const T &in, const writer_params &wp )
+inline void to_string( string &str, const T &in, const writer_params &wp )
 {
 	document doc;
 	to_document( doc, in );
@@ -429,9 +429,9 @@ inline void to_string( std::string &str, const T &in, const writer_params &wp )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline std::string to_string( const T &in, const writer_params &wp )
+inline string to_string( const T &in, const writer_params &wp )
 {
-	std::string result;
+	string result;
 	to_string( result, in, wp );
 	return result;
 }
@@ -447,7 +447,7 @@ inline error from_document( const document &doc, T &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_string( std::string_view str, T &out )
+inline error from_string( string_view str, T &out )
 {
 	document doc;
 	if ( auto err = from_string( str, doc ) )

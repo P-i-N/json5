@@ -11,32 +11,32 @@ public:
 
 	const document &doc() const noexcept { return _doc; }
 
-	value new_string( std::string_view str ) { return new_string( string_buffer_add( str ) ); }
+	value new_string( string_view str ) { return new_string( string_buffer_add( str ) ); }
 
 	void push_object();
 	void push_array();
 	value pop();
-	
+
 	template <typename... Args>
-	builder& operator()( Args... values )
+	builder &operator()( Args... values )
 	{
-		bool results[] = { add_item(values)... };
+		bool results[] = { add_item( values )... };
 		return *this;
 	}
 
-	value& operator[]( std::string_view key );
+	value &operator[]( string_view key );
 
 protected:
 	void reset() noexcept;
 
 	detail::string_offset string_buffer_offset() const noexcept;
-	detail::string_offset string_buffer_add( std::string_view str );
+	detail::string_offset string_buffer_add( string_view str );
 	void string_buffer_add( char ch ) { _doc._strings.push_back( ch ); }
 	void string_buffer_add_utf8( uint32_t ch );
 
 	value new_string( detail::string_offset stringOffset )
 	{
-		return value(value_type::null, value::type_string_off | stringOffset);
+		return value( value_type::null, value::type_string_off | stringOffset );
 	}
 
 	bool add_item( value v );
@@ -76,7 +76,7 @@ inline detail::string_offset builder::string_buffer_offset() const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline detail::string_offset builder::string_buffer_add( std::string_view str )
+inline detail::string_offset builder::string_buffer_add( string_view str )
 {
 	auto offset = string_buffer_offset();
 	_doc._strings += str;
@@ -173,7 +173,7 @@ inline value builder::pop()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value &builder::operator[]( std::string_view key )
+inline value &builder::operator[]( string_view key )
 {
 	add_item( new_string( key ) );
 	_counts.back() += 1;

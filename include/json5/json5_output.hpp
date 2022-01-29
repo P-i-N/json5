@@ -7,15 +7,15 @@
 namespace json5 {
 
 // Converts json5::document to string
-void to_string( std::string &str, const document &doc, const writer_params &wp = writer_params() );
+void to_string( string &str, const document &doc, const writer_params &wp = writer_params() );
 
 // Returns json5::document converted to string
-std::string to_string( const document &doc, const writer_params &wp = writer_params() );
+string to_string( const document &doc, const writer_params &wp = writer_params() );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string( std::string &str, const char *utf8Str, char quotes, bool escapeUnicode )
+inline void to_string( string &str, const char *utf8Str, char quotes, bool escapeUnicode )
 {
 	if ( quotes )
 		str += quotes;
@@ -99,7 +99,7 @@ inline void to_string( std::string &str, const char *utf8Str, char quotes, bool 
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string( std::string &str, const value &v, const writer_params &wp, int depth )
+inline void to_string( string &str, const value &v, const writer_params &wp, int depth )
 {
 	const char *kvSeparator = ": ";
 	const char *eol = wp.eol;
@@ -159,7 +159,7 @@ inline void to_string( std::string &str, const value &v, const writer_params &wp
 				str += " ]";
 			else
 			{
-				for (int i = 0; i < depth; ++i) str += wp.indentation;
+				for ( int i = 0; i < depth; ++i ) str += wp.indentation;
 				str += "]";
 			}
 		}
@@ -207,7 +207,7 @@ inline void to_string( std::string &str, const value &v, const writer_params &wp
 				str += " }";
 			else
 			{
-				for (int i = 0; i < depth; ++i) str += wp.indentation;
+				for ( int i = 0; i < depth; ++i ) str += wp.indentation;
 				str += "}";
 			}
 		}
@@ -220,25 +220,11 @@ inline void to_string( std::string &str, const value &v, const writer_params &wp
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string( const document &doc, const writer_params &wp )
+inline string to_string( const document &doc, const writer_params &wp )
 {
-	std::string result;
+	string result;
 	to_string( result, doc, wp, 0 );
 	return result;
-}
-
-//---------------------------------------------------------------------------------------------------------------------
-inline std::string to_string( const error &err )
-{
-	JSON5_ASSERT( 0 ); // TODO
-
-	/*
-	std::ostringstream os;
-	to_stream( os, err );
-	return os.str();
-	*/
-
-	return "";
 }
 
 } // namespace json5

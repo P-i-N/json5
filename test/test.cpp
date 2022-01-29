@@ -27,7 +27,7 @@ bool PrintError( const json5::error &err )
 {
 	if ( err )
 	{
-		std::cout << json5::to_string( err ) << std::endl;
+		std::cout << json5::error::type_string[err.type] << " at byte " << err.loc.offset << std::endl;
 		return true;
 	}
 
@@ -69,12 +69,12 @@ int main( int argc, char *argv[] )
 		b.push_object();
 		{
 			b["x"] = "Hello!";
-			b["y"] = 123.0;
+			b["y"] = 123.0f;
 			b["z"] = true;
 
 			b.push_array();
 			{
-				b("a", "b", "c");
+				b( "a", "b", "c" );
 			}
 			b["arr"] = b.pop();
 		}

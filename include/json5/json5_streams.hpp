@@ -8,23 +8,23 @@
 namespace json5 {
 
 // Write json5::document into file, returns 'true' on success
-bool to_file( const std::string &fileName, const document &doc, const writer_params &wp = writer_params() );
+bool to_file( string_view fileName, const document &doc, const writer_params &wp = writer_params() );
 
 // Serialize instance of type 'T' into file
-template <typename T> bool to_file( std::string_view fileName, const T &in, const writer_params &wp = writer_params() );
+template <typename T> bool to_file( string_view fileName, const T &in, const writer_params &wp = writer_params() );
 
 // Parse json5::document from file
-error from_file( std::string_view fileName, document &doc );
+error from_file( string_view fileName, document &doc );
 
 // Initialize instance of type 'T' from file
-template <typename T> error from_file( std::string_view fileName, T &out );
+template <typename T> error from_file( string_view fileName, T &out );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool to_file( const std::string &fileName, const document &doc, const writer_params &wp )
+inline bool to_file( string_view fileName, const document &doc, const writer_params &wp )
 {
-	std::ofstream ofs( fileName );
+	std::ofstream ofs( string( fileName ).c_str() );
 	if ( !ofs.is_open() )
 		return false;
 
@@ -34,9 +34,9 @@ inline bool to_file( const std::string &fileName, const document &doc, const wri
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline bool to_file( std::string_view fileName, const T &in, const writer_params &wp )
+inline bool to_file( string_view fileName, const T &in, const writer_params &wp )
 {
-	std::ofstream ofs( std::string( fileName ).c_str() );
+	std::ofstream ofs( string( fileName ).c_str() );
 	if ( !ofs.is_open() )
 		return false;
 
@@ -48,19 +48,19 @@ inline bool to_file( std::string_view fileName, const T &in, const writer_params
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_file( std::string_view fileName, document &doc )
+inline error from_file( string_view fileName, document &doc )
 {
-	std::ifstream ifs( std::string( fileName ).c_str() );
+	std::ifstream ifs( string( fileName ).c_str() );
 	if ( !ifs.is_open() )
 		return { error::could_not_open };
 
-	auto str = std::string( std::istreambuf_iterator<char>( ifs ), std::istreambuf_iterator<char>() );
-	return from_string( std::string_view( str ), doc );
+	auto str = string( std::istreambuf_iterator<char>( ifs ), std::istreambuf_iterator<char>() );
+	return from_string( string_view( str ), doc );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error from_file( std::string_view fileName, T &out )
+inline error from_file( string_view fileName, T &out )
 {
 	document doc;
 	if ( auto err = from_file( fileName, doc ) )

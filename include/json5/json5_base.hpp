@@ -1,7 +1,5 @@
 #pragma once
 
-#include <type_traits>
-
 #if !defined(JSON5_ASSERT)
 	#include <cassert>
 	#define JSON5_ASSERT(_Cond) assert(_Cond)
@@ -55,7 +53,7 @@
 	JSON5_ENUM(MyEnum, One, Two, Three)
 */
 #define JSON5_ENUM(_Name, ...) \
-	template <> struct json5::detail::enum_table<_Name> : std::true_type { \
+	template <> struct json5::detail::enum_table<_Name> : json5::detail::true_type { \
 		using enum _Name; \
 		static constexpr const char* names = #__VA_ARGS__; \
 		static constexpr const _Name values[] = { __VA_ARGS__ }; };
@@ -79,7 +77,7 @@ struct location final
 
 	location(): line( 0 ), column( 0 ), offset( 0 ) { }
 	location( unsigned l, unsigned c, unsigned off ): line( l ), column( c ), offset( off ) { }
-	
+
 	bool is_valid() const noexcept { return line > 0 && column > 0; }
 };
 
@@ -214,6 +212,9 @@ template <typename T> struct class_wrapper
 	inline static auto make_named_ref_list( const T &in ) noexcept { return in.make_named_ref_list(); }
 };
 
-template <typename T> struct enum_table : std::false_type { };
+struct true_type { constexpr operator bool() const noexcept { return true; } };
+struct false_type { constexpr operator bool() const noexcept { return false; } };
+
+template <typename T> struct enum_table : false_type { };
 
 } // namespace json5::detail

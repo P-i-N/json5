@@ -12,7 +12,7 @@
 namespace json5 {
 
 // Parse json5::document from string
-error from_string( std::string_view str, document &doc );
+error from_string( string_view str, document &doc );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -557,7 +557,7 @@ inline error parser::parse_literal( token_type &result )
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error from_string( std::string_view str, document &doc )
+inline error from_string( string_view str, document &doc )
 {
 	parser r( doc, str.data(), str.size() );
 	return r.parse();
