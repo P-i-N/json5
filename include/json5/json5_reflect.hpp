@@ -343,7 +343,7 @@ inline error read( const json5::object_view &obj, json5::detail::named_ref_list<
 	{
 		if constexpr ( std::is_enum_v<Type> )
 		{
-			if constexpr ( enum_table<Type>::value )
+			if constexpr ( enum_table<Type>() )
 			{
 				if ( auto err = read_enum( ( *iter ).second, out ) )
 					return err;

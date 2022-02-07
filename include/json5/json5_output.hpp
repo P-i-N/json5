@@ -2,7 +2,7 @@
 
 #include "json5.hpp"
 
-#include <inttypes.h>
+#include <cinttypes>
 
 namespace json5 {
 

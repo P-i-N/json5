@@ -36,7 +36,7 @@ protected:
 
 	value new_string( detail::string_offset stringOffset )
 	{
-		return value( value_type::null, value::type_string_off | stringOffset );
+		return { value_type::null, value::type_string_off | stringOffset };
 	}
 
 	bool add_item( value v );
@@ -149,7 +149,7 @@ inline value builder::pop()
 
 	result.payload( _doc._values.size() );
 
-	_doc._values.push_back( value( double( count ) ) );
+	_doc._values.emplace_back( double( count ) );
 
 	auto startIndex = _values.size() - count;
 	for ( size_t i = startIndex, S = _values.size(); i < S; ++i )

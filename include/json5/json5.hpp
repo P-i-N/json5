@@ -2,15 +2,18 @@
 
 #include "json5_base.hpp"
 
-#if !defined(JSON5_DO_NOT_USE_STL)
+#if !defined( JSON5_DO_NOT_USE_STL )
 	#include <string>
 	#include <vector>
-	#define _JSON5_MOVE std::move
+	#define _JSON5_MOVE    std::move
 	#define _JSON5_FORWARD std::forward
 
-	namespace json5 {
-		using string_view = std::string_view;
-	} // namespace json5
+namespace json5 {
+using string = std::string;
+using string_view = std::string_view;
+} // namespace json5
+#else
+
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -26,22 +29,22 @@ class value
 {
 public:
 	// Construct null value
-	value() noexcept : _data( type_null ) { }
+	value() noexcept: _data( type_null ) {}
 
 	// Construct null value
-	value( std::nullptr_t ) noexcept : _data( type_null ) { }
+	value( std::nullptr_t ) noexcept: _data( type_null ) {}
 
 	// Construct boolean value
-	value( bool val ) noexcept : _data( val ? type_true : type_false ) { }
+	value( bool val ) noexcept: _data( val ? type_true : type_false ) {}
 
 	// Construct number value from int (will be converted to double)
-	value( int val ) noexcept : _double( val ) { }
+	value( int val ) noexcept: _double( val ) {}
 
 	// Construct number value from double
-	value( double val ) noexcept : _double( val ) { }
+	value( double val ) noexcept: _double( val ) {}
 
 	// Construct string value from null-terminated string
-	value( const char *val ) noexcept : value( value_type::string, val ) { }
+	value( const char *val ) noexcept: value( value_type::string, val ) {}
 
 	// Return value type
 	value_type type() const noexcept;
@@ -110,22 +113,30 @@ public:
 	value operator[]( size_t index ) const noexcept;
 
 	// Get value payload (lower 48bits of _data) converted to type 'T'
-	template <typename T> T payload() const noexcept { return ( T )( _data & mask_payload ); }
+	template <typename T>
+	T payload() const noexcept
+	{
+		return ( T )( _data & mask_payload );
+	}
 
 	// Get location in the original file (line, column & byte offset)
 	location loc() const noexcept { return _loc; }
 
 	template <typename T>
-	[[deprecated( "Use get_number instead" )]]
-	T get( T defaultValue = 0 ) const noexcept { return get_number<T>( defaultValue ); }
+	[[deprecated( "Use get_number instead" )]] T get( T defaultValue = 0 ) const noexcept
+	{
+		return get_number<T>( defaultValue );
+	}
 
 	template <typename T>
-	[[deprecated( "Use try_get_number" )]]
-	bool try_get( T &out ) const noexcept { return try_get_number( out ); }
+	[[deprecated( "Use try_get_number" )]] bool try_get( T &out ) const noexcept
+	{
+		return try_get_number( out );
+	}
 
 protected:
 	value( value_type t, uint64_t data );
-	value( value_type t, const void *data ) : value( t, reinterpret_cast<uint64_t>( data ) ) { }
+	value( value_type t, const void *data ): value( t, reinterpret_cast<uint64_t>( data ) ) {}
 
 	void relink( const class document *prevDoc, class document &doc ) noexcept;
 
@@ -137,8 +148,9 @@ protected:
 	};
 
 	// Location in source file
-	location _loc = { };
+	location _loc = {};
 
+	// clang-format off
 	static constexpr uint64_t mask_nanbits     = 0xFFF0000000000000ull;
 	static constexpr uint64_t mask_type        = 0xFFF7000000000000ull;
 	static constexpr uint64_t mask_is_document = 0x0008000000000000ull;
@@ -150,7 +162,8 @@ protected:
 	static constexpr uint64_t type_array       = 0xFFF5000000000000ull;
 	static constexpr uint64_t type_object      = 0xFFF6000000000000ull;
 	static constexpr uint64_t type_null        = 0xFFF7000000000000ull;
-
+	// clang-format on
+	//
 	// Stores lower 48bits of uint64 as payload
 	void payload( uint64_t p ) noexcept { _data = ( _data & ~mask_payload ) | p; }
 
@@ -169,11 +182,11 @@ protected:
 json5::document
 
 */
-class document final : public value
+class document final: public value
 {
 public:
 	// Construct empty document
-	document() : value() { _data = value::type_null | value::mask_is_document; }
+	document(): value() { _data = value::type_null | value::mask_is_document; }
 
 	// Construct a document copy
 	document( const document &copy ) { assign_copy( copy ); }
@@ -182,10 +195,18 @@ public:
 	document( document &&rValue ) noexcept { assign_rvalue( _JSON5_FORWARD<document>( rValue ) ); }
 
 	// Copy data from another document (does a deep copy)
-	document &operator=( const document &copy ) { assign_copy( copy ); return *this; }
+	document &operator=( const document &copy )
+	{
+		assign_copy( copy );
+		return *this;
+	}
 
 	// Assign data from r-value (does a swap)
-	document &operator=( document &&rValue ) noexcept { assign_rvalue( _JSON5_FORWARD<document>( rValue ) ); return *this; }
+	document &operator=( document &&rValue ) noexcept
+	{
+		assign_rvalue( _JSON5_FORWARD<document>( rValue ) );
+		return *this;
+	}
 
 private:
 	detail::string_offset alloc_string( const char *str, size_t length = size_t( -1 ) );
@@ -198,7 +219,7 @@ private:
 	void assign_rvalue( document &&rValue ) noexcept;
 	void assign_root( value root ) noexcept;
 
-	const char* strings_data() const noexcept { return reinterpret_cast<const char*>( _strings.data() ); }
+	const char *strings_data() const noexcept { return reinterpret_cast<const char *>( _strings.data() ); }
 
 	std::vector<uint8_t> _strings;
 	std::vector<value> _values;
@@ -223,9 +244,9 @@ public:
 	// Construct object view over a value. If the provided value does not reference a JSON object,
 	// this object_view will be created empty (and invalid)
 	object_view( const value &v ) noexcept
-		: _pair( v.is_object() ? ( v.payload<const value*>() + 1 ) : nullptr )
-		, _count( _pair ? ( _pair[-1].get_number<size_t>() / 2 ) : 0 )
-	{ }
+	  : _pair( v.is_object() ? ( v.payload<const value *>() + 1 ) : nullptr )
+	  , _count( _pair ? ( _pair[-1].get_number<size_t>() / 2 ) : 0 )
+	{}
 
 	// Checks, if object view was constructed from valid value
 	bool is_valid() const noexcept { return _pair != nullptr; }
@@ -238,17 +259,21 @@ public:
 
 	struct key_value_pair
 	{
-		const char* first;
-		value second;
+		string_view first = string_view();
+		value second = value();
 	};
 
 	class iterator final
 	{
 	public:
-		iterator( const value *p = nullptr ) noexcept : _pair( p ) { }
+		iterator( const value *p = nullptr ) noexcept: _pair( p ) {}
 		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
-		iterator &operator++() noexcept { _pair += 2; return *this; }
+		iterator &operator++() noexcept
+		{
+			_pair += 2;
+			return *this;
+		}
 		key_value_pair operator*() const noexcept { return { _pair[0].get_c_str(), _pair[1] }; }
 
 	private:
@@ -256,10 +281,10 @@ public:
 	};
 
 	// Get an iterator to the beginning of the object (first key-value pair)
-	iterator begin() const noexcept { return iterator( _pair ); }
+	iterator begin() const noexcept { return { _pair }; }
 
 	// Get an iterator to the end of the object (past the last key-value pair)
-	iterator end() const noexcept { return iterator( _pair + _count * 2 ); }
+	iterator end() const noexcept { return { _pair + _count * 2 }; }
 
 	// Find property value with 'key'. Returns end iterator, when not found.
 	iterator find( string_view key ) const noexcept;
@@ -269,7 +294,12 @@ public:
 
 	// True, when object is empty
 	bool empty() const noexcept { return size() == 0; }
+
+	// Returns value associated with specified key or invalid value, when key is not found
 	value operator[]( string_view key ) const noexcept;
+
+	// Returns key-value pair at specified index
+	key_value_pair operator[]( size_t index ) const noexcept;
 
 	bool operator==( const object_view &other ) const noexcept { return _pair == other._pair; }
 	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
@@ -295,9 +325,9 @@ public:
 	// Construct array view over a value. If the provided value does not reference a JSON array,
 	// this array_view will be created empty (and invalid)
 	array_view( const value &v ) noexcept
-		: _value( v.is_array() ? ( v.payload<const value*>() + 1 ) : nullptr )
-		, _count( _value ? _value[-1].get_number<size_t>() : 0 )
-	{ }
+	  : _value( v.is_array() ? ( v.payload<const value *>() + 1 ) : nullptr )
+	  , _count( _value ? _value[-1].get_number<size_t>() : 0 )
+	{}
 
 	// Checks, if array view was constructed from valid value
 	bool is_valid() const noexcept { return _value != nullptr; }
@@ -308,7 +338,7 @@ public:
 	// Location of the source value, returns invalid location for invalid view
 	location loc() const noexcept { return _value ? _value->loc() : location(); }
 
-	using iterator = const value*;
+	using iterator = const value *;
 
 	iterator begin() const noexcept { return _value; }
 	iterator end() const noexcept { return _value + _count; }
@@ -400,7 +430,7 @@ inline bool value::operator==( const value &other ) const noexcept
 inline value value::operator[]( string_view key ) const noexcept
 {
 	if ( !is_object() )
-		return value();
+		return {};
 
 	object_view ov( *this );
 	return ov[key];
@@ -410,7 +440,7 @@ inline value value::operator[]( string_view key ) const noexcept
 inline value value::operator[]( size_t index ) const noexcept
 {
 	if ( !is_array() )
-		return value();
+		return {};
 
 	array_view av( *this );
 	return av[index];
@@ -422,13 +452,13 @@ inline void value::relink( const class document *prevDoc, class document &doc ) 
 	if ( ( _data & mask_type ) == type_string )
 	{
 		if ( prevDoc )
-			payload( payload<const char*>() - prevDoc->strings_data() );
+			payload( payload<const char *>() - prevDoc->strings_data() );
 		else
 		{
-			if ( auto* str = get_c_str(); str < doc.strings_data() || str >= doc.strings_data() + doc._strings.size() )
+			if ( auto *str = get_c_str(); str < doc.strings_data() || str >= doc.strings_data() + doc._strings.size() )
 				payload( doc.alloc_string( str ) );
 			else
-				payload( payload<const char*>() - doc.strings_data() );
+				payload( payload<const char *>() - doc.strings_data() );
 		}
 
 		_data &= ~mask_type;
@@ -472,9 +502,9 @@ inline void document::reset() noexcept
 //---------------------------------------------------------------------------------------------------------------------
 inline void document::convert_string_offsets()
 {
-	for ( auto& v : _values )
+	for ( auto &v : _values )
 	{
-		if ( ( v._data & mask_type) == type_string_off )
+		if ( ( v._data & mask_type ) == type_string_off )
 		{
 			v.payload( strings_data() + v.payload<uint64_t>() );
 			v._data &= ~mask_type;
@@ -540,6 +570,15 @@ inline value object_view::operator[]( string_view key ) const noexcept
 {
 	const auto iter = find( key );
 	return ( iter != end() ) ? ( *iter ).second : value();
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+inline object_view::key_value_pair object_view::operator[]( size_t index ) const noexcept
+{
+	if ( index >= _count )
+		return {};
+
+	return { _pair[index * 2].get_c_str(), _pair[index * 2 + 1] };
 }
 
 //---------------------------------------------------------------------------------------------------------------------

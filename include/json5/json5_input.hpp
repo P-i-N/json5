@@ -2,6 +2,8 @@
 
 #include "json5_builder.hpp"
 
+#include <ctype.h>
+
 #if __has_include(<charconv>)
 	#include <charconv>
 	#if !defined(_JSON5_HAS_CHARCONV)
