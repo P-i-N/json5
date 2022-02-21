@@ -2,32 +2,34 @@
 
 #include "json5_builder.hpp"
 
-#include <array>
-#include <map>
-#include <unordered_map>
+#if !defined( JSON5_DO_NOT_USE_STL )
+	#include <array>
+	#include <map>
+	#include <unordered_map>
+#endif
 
 namespace json5 {
 
-//
+// Serialize instance of type 'T' into json5::document
 template <typename T> void to_document( document &doc, const T &in, const writer_params &wp = writer_params() );
 
-//
+// Serialize instance of type 'T' into JSON string
 template <typename T> void to_string( string &str, const T &in, const writer_params &wp = writer_params() );
 
-//
+// Serialize instance of type 'T' into JSON string
 template <typename T> string to_string( const T &in, const writer_params &wp = writer_params() );
 
-//
+// Deserialize json5::document into instance of type 'T'
 template <typename T> error from_document( const document &doc, T &out );
 
-//
+// Deserialize JSON string into instance of type 'T'
 template <typename T> error from_string( string_view str, T &out );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
 
-// Pre-declare so compiler knows it exists before it is attempted to be used
+/* Forward declarations */
 template <typename T> error read( const json5::value &in, T &out );
 
 class writer final : public builder
@@ -91,9 +93,6 @@ inline json5::value write( writer &w, const std::vector<T, A> &in ) { return wri
 template <typename T, size_t N>
 inline json5::value write( writer &w, const T( &in )[N] ) { return write_array( w, in, N ); }
 
-//---------------------------------------------------------------------------------------------------------------------
-template <typename T, size_t N>
-inline json5::value write( writer &w, const std::array<T, N> &in ) { return write_array( w, in.data(), N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
@@ -107,12 +106,27 @@ inline json5::value write_map( writer &w, const T &in )
 	return w.pop();
 }
 
+#if !defined( JSON5_DO_NOT_USE_STL )
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, size_t N>
+inline json5::value write( writer &w, const std::array<T, N> &in )
+{
+	return write_array( w, in.data(), N );
+}
+
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline json5::value write( writer &w, const std::map<K, T, P, A> &in ) { return write_map( w, in ); }
+inline json5::value write( writer &w, const std::map<K, T, P, A> &in )
+{
+	return write_map( w, in );
+}
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline json5::value write( writer &w, const std::unordered_map<K, T, H, EQ, A> &in ) { return write_map( w, in ); }
+inline json5::value write( writer &w, const std::unordered_map<K, T, H, EQ, A> &in )
+{
+	return write_map( w, in );
+}
+#endif
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
@@ -128,7 +142,7 @@ inline json5::value write_enum( writer &w, T in )
 
 		// Underlying value fallback
 		if ( name.empty() )
-			return write( w, std::underlying_type_t<T>( in ) );
+			return write( w, _JSON5_UNDERLYING( T )( in ) );
 
 		if ( in == values[index] )
 			return w.new_string( name );
@@ -136,7 +150,7 @@ inline json5::value write_enum( writer &w, T in )
 		++index;
 	}
 
-	return json5::value();
+	return {};
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -144,7 +158,7 @@ template <size_t Index = 0, typename... Types>
 inline void write( writer &w, const json5::detail::named_ref_list<Types...> &t )
 {
 	const auto &in = t.get( json5::detail::index<Index>() );
-	using Type = std::remove_const_t<std::remove_reference_t<decltype( in )>>;
+	using Type = _JSON5_DECAY( decltype( in ) );
 
 	if ( auto name = get_name_slice( t.names(), Index ); !name.empty() )
 	{
@@ -153,7 +167,7 @@ inline void write( writer &w, const json5::detail::named_ref_list<Types...> &t )
 			if constexpr ( enum_table<Type>() )
 				w[name] = write_enum( w, in );
 			else
-				w[name] = write( w, std::underlying_type_t<Type>( in ) );
+				w[name] = write( w, _JSON5_UNDERLYING( Type )( in ) );
 		}
 		else
 			w[name] = write( w, in );
@@ -243,10 +257,6 @@ template <typename T, size_t N>
 inline error read( const json5::value &in, T( &out )[N] ) { return read_array( in, out, N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
-template <typename T, size_t N>
-inline error read( const json5::value &in, std::array<T, N> &out ) { return read_array( in, out.data(), N ); }
-
-//---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
 inline error read( const json5::value &in, std::vector<T, A> &out )
 {
@@ -287,12 +297,27 @@ inline error read_map( const json5::value &in, T &out )
 	return { error::none };
 }
 
+#if !defined( JSON5_DO_NOT_USE_STL )
+//---------------------------------------------------------------------------------------------------------------------
+template <typename T, size_t N>
+inline error read( const json5::value &in, std::array<T, N> &out )
+{
+	return read_array( in, out.data(), N );
+}
+
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline error read( const json5::value &in, std::map<K, T, P, A> &out ) { return read_map( in, out ); }
+inline error read( const json5::value &in, std::map<K, T, P, A> &out )
+{
+	return read_map( in, out );
+}
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline error read( const json5::value &in, std::unordered_map<K, T, H, EQ, A> &out ) { return read_map( in, out ); }
+inline error read( const json5::value &in, std::unordered_map<K, T, H, EQ, A> &out )
+{
+	return read_map( in, out );
+}
+#endif
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
@@ -334,7 +359,7 @@ template <size_t Index = 0, typename... Types>
 inline error read( const json5::object_view &obj, json5::detail::named_ref_list<Types...> &t )
 {
 	auto &out = t.get( json5::detail::index<Index>() );
-	using Type = std::remove_reference_t<decltype( out )>;
+	using Type = _JSON5_DECAY( decltype( out ) );
 
 	auto name = get_name_slice( t.names(), Index );
 
@@ -350,7 +375,7 @@ inline error read( const json5::object_view &obj, json5::detail::named_ref_list<
 			}
 			else
 			{
-				std::underlying_type_t<Type> temp = { };
+				_JSON5_UNDERLYING( Type ) temp = {};
 				if ( auto err = read( ( *iter ).second, temp ) )
 					return err;
 

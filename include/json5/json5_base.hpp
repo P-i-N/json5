@@ -167,11 +167,7 @@ template <size_t I> struct index { static constexpr size_t value = I; };
 
 template <typename... Args> class ref_list { };
 
-template <> class ref_list<>
-{
-public:
-	ref_list() { }
-};
+template <> class ref_list<> { };
 
 template <typename Head, typename... Tail>
 class ref_list<Head, Tail...> : public ref_list<Tail... >

@@ -5,8 +5,10 @@
 #if !defined( JSON5_DO_NOT_USE_STL )
 	#include <string>
 	#include <vector>
-	#define _JSON5_MOVE    std::move
-	#define _JSON5_FORWARD std::forward
+	#define _JSON5_MOVE                std::move
+	#define _JSON5_FORWARD             std::forward
+	#define _JSON5_DECAY( _Type )      std::decay_t<_Type>
+	#define _JSON5_UNDERLYING( _Type ) std::underlying_type_t<_Type>
 
 namespace json5 {
 using string = std::string;
@@ -163,7 +165,7 @@ protected:
 	static constexpr uint64_t type_object      = 0xFFF6000000000000ull;
 	static constexpr uint64_t type_null        = 0xFFF7000000000000ull;
 	// clang-format on
-	//
+
 	// Stores lower 48bits of uint64 as payload
 	void payload( uint64_t p ) noexcept { _data = ( _data & ~mask_payload ) | p; }
 
