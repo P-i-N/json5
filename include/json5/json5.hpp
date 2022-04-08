@@ -20,11 +20,11 @@ using string_view = std::string_view;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace json5 {
+namespace json5::detail {
 
 /*
 
-json5::value
+json5::detail::value
 
 */
 class value
@@ -177,18 +177,22 @@ protected:
 	friend parser;
 };
 
+} // namespace json5::detail
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace json5 {
 
 /*
 
 json5::document
 
 */
-class document final: public value
+class document final: public detail::value
 {
 public:
 	// Construct empty document
-	document(): value() { _data = value::type_null | value::mask_is_document; }
+	document(): detail::value() { _data = detail::value::type_null | detail::value::mask_is_document; }
 
 	// Construct a document copy
 	document( const document &copy ) { assign_copy( copy ); }
@@ -219,14 +223,14 @@ private:
 
 	void assign_copy( const document &copy );
 	void assign_rvalue( document &&rValue ) noexcept;
-	void assign_root( value root ) noexcept;
+	void assign_root( detail::value root ) noexcept;
 
 	const char *strings_data() const noexcept { return reinterpret_cast<const char *>( _strings.data() ); }
 
 	std::vector<uint8_t> _strings;
-	std::vector<value> _values;
+	std::vector<detail::value> _values;
 
-	friend value;
+	friend detail::value;
 	friend builder;
 };
 
@@ -245,8 +249,8 @@ public:
 
 	// Construct object view over a value. If the provided value does not reference a JSON object,
 	// this object_view will be created empty (and invalid)
-	object_view( const value &v ) noexcept
-	  : _pair( v.is_object() ? ( v.payload<const value *>() + 1 ) : nullptr )
+	object_view( const detail::value &v ) noexcept
+	  : _pair( v.is_object() ? ( v.payload<const detail::value *>() + 1 ) : nullptr )
 	  , _count( _pair ? ( _pair[-1].get_number<size_t>() / 2 ) : 0 )
 	{}
 
@@ -254,7 +258,7 @@ public:
 	bool is_valid() const noexcept { return _pair != nullptr; }
 
 	// Source JSON value (first key value in first key-value pair)
-	const value *source() const noexcept { return _pair; }
+	const detail::value *source() const noexcept { return _pair; }
 
 	// Location of the source value, returns invalid location for invalid view
 	location loc() const noexcept { return _pair ? _pair->loc() : location(); }
@@ -262,13 +266,13 @@ public:
 	struct key_value_pair
 	{
 		string_view first = string_view();
-		value second = value();
+		detail::value second = detail::value();
 	};
 
 	class iterator final
 	{
 	public:
-		iterator( const value *p = nullptr ) noexcept: _pair( p ) {}
+		iterator( const detail::value *p = nullptr ) noexcept: _pair( p ) {}
 		bool operator!=( const iterator &other ) const noexcept { return _pair != other._pair; }
 		bool operator==( const iterator &other ) const noexcept { return _pair == other._pair; }
 		iterator &operator++() noexcept
@@ -279,7 +283,7 @@ public:
 		key_value_pair operator*() const noexcept { return { _pair[0].get_c_str(), _pair[1] }; }
 
 	private:
-		const value *_pair = nullptr;
+		const detail::value *_pair = nullptr;
 	};
 
 	// Get an iterator to the beginning of the object (first key-value pair)
@@ -298,7 +302,7 @@ public:
 	bool empty() const noexcept { return size() == 0; }
 
 	// Returns value associated with specified key or invalid value, when key is not found
-	value operator[]( string_view key ) const noexcept;
+	detail::value operator[]( string_view key ) const noexcept;
 
 	// Returns key-value pair at specified index
 	key_value_pair operator[]( size_t index ) const noexcept;
@@ -307,7 +311,7 @@ public:
 	bool operator!=( const object_view &other ) const noexcept { return !( ( *this ) == other ); }
 
 private:
-	const value *_pair = nullptr;
+	const detail::value *_pair = nullptr;
 	size_t _count = 0;
 };
 
@@ -326,8 +330,8 @@ public:
 
 	// Construct array view over a value. If the provided value does not reference a JSON array,
 	// this array_view will be created empty (and invalid)
-	array_view( const value &v ) noexcept
-	  : _value( v.is_array() ? ( v.payload<const value *>() + 1 ) : nullptr )
+	array_view( const detail::value &v ) noexcept
+	  : _value( v.is_array() ? ( v.payload<const detail::value *>() + 1 ) : nullptr )
 	  , _count( _value ? _value[-1].get_number<size_t>() : 0 )
 	{}
 
@@ -335,28 +339,30 @@ public:
 	bool is_valid() const noexcept { return _value != nullptr; }
 
 	// Source JSON value (first array item)
-	const value *source() const noexcept { return _value; }
+	const detail::value *source() const noexcept { return _value; }
 
 	// Location of the source value, returns invalid location for invalid view
 	location loc() const noexcept { return _value ? _value->loc() : location(); }
 
-	using iterator = const value *;
+	using iterator = const detail::value *;
 
 	iterator begin() const noexcept { return _value; }
 	iterator end() const noexcept { return _value + _count; }
 	size_t size() const noexcept { return _count; }
 	bool empty() const noexcept { return _count == 0; }
-	value operator[]( size_t index ) const noexcept;
+	detail::value operator[]( size_t index ) const noexcept;
 
 	bool operator==( const array_view &other ) const noexcept { return _value == other._value; }
 	bool operator!=( const array_view &other ) const noexcept { return !( ( *this ) == other ); }
 
 private:
-	const value *_value = nullptr;
+	const detail::value *_value = nullptr;
 	size_t _count = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
 
 //---------------------------------------------------------------------------------------------------------------------
 inline value::value( value_type t, uint64_t data )
@@ -475,6 +481,8 @@ inline void value::relink( const class document *prevDoc, class document &doc ) 
 	}
 }
 
+} // namespace detail
+
 //---------------------------------------------------------------------------------------------------------------------
 inline detail::string_offset document::alloc_string( const char *str, size_t length )
 {
@@ -568,10 +576,10 @@ inline object_view::iterator object_view::find( string_view key ) const noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value object_view::operator[]( string_view key ) const noexcept
+inline detail::value object_view::operator[]( string_view key ) const noexcept
 {
 	const auto iter = find( key );
-	return ( iter != end() ) ? ( *iter ).second : value();
+	return ( iter != end() ) ? ( *iter ).second : detail::value();
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -584,9 +592,9 @@ inline object_view::key_value_pair object_view::operator[]( size_t index ) const
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value array_view::operator[]( size_t index ) const noexcept
+inline detail::value array_view::operator[]( size_t index ) const noexcept
 {
-	return ( index < _count ) ? _value[index] : value();
+	return ( index < _count ) ? _value[index] : detail::value();
 }
 
 } // namespace json5

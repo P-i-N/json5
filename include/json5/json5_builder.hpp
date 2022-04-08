@@ -11,11 +11,11 @@ public:
 
 	const document &doc() const noexcept { return _doc; }
 
-	value new_string( string_view str ) { return new_string( string_buffer_add( str ) ); }
+	detail::value new_string( string_view str ) { return new_string( string_buffer_add( str ) ); }
 
 	void push_object();
 	void push_array();
-	value pop();
+	detail::value pop();
 
 	template <typename... Args>
 	builder &operator()( Args... values )
@@ -24,7 +24,7 @@ public:
 		return *this;
 	}
 
-	value &operator[]( string_view key );
+	detail::value &operator[]( string_view key );
 
 protected:
 	void reset() noexcept;
@@ -34,16 +34,16 @@ protected:
 	void string_buffer_add( char ch ) { _doc._strings.push_back( ch ); }
 	void string_buffer_add_utf8( uint32_t ch );
 
-	value new_string( detail::string_offset stringOffset )
+	detail::value new_string( detail::string_offset stringOffset )
 	{
-		return { value_type::null, value::type_string_off | stringOffset };
+		return { value_type::null, detail::value::type_string_off | stringOffset };
 	}
 
-	bool add_item( value v );
+	bool add_item( detail::value v );
 
 	document &_doc;
-	std::vector<value> _stack;
-	std::vector<value> _values;
+	std::vector<detail::value> _stack;
+	std::vector<detail::value> _values;
 	std::vector<size_t> _counts;
 };
 
@@ -59,7 +59,7 @@ inline void builder::reset() noexcept
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline bool builder::add_item( value v )
+inline bool builder::add_item( detail::value v )
 {
 	if ( _stack.empty() )
 		return false;
@@ -130,21 +130,21 @@ inline void builder::string_buffer_add_utf8( uint32_t ch )
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::push_object()
 {
-	_stack.push_back( value( value_type::object, nullptr ) );
+	_stack.push_back( detail::value( value_type::object, nullptr ) );
 	_counts.push_back( 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 inline void builder::push_array()
 {
-	_stack.push_back( value( value_type::array, nullptr ) );
+	_stack.push_back( detail::value( value_type::array, nullptr ) );
 	_counts.push_back( 0 );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value builder::pop()
+inline detail::value builder::pop()
 {
-	value result = _stack.back();
+	auto result = _stack.back();
 	size_t count = _counts.back();
 
 	result.payload( _doc._values.size() );
@@ -170,7 +170,7 @@ inline value builder::pop()
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline value &builder::operator[]( string_view key )
+inline detail::value &builder::operator[]( string_view key )
 {
 	add_item( new_string( key ) );
 	_counts.back() += 1;

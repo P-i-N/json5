@@ -38,7 +38,7 @@ private:
 		literal_true, literal_false, literal_null, literal_NaN
 	};
 
-	error parse_value( value &result );
+	error parse_value( detail::value &result );
 	error parse_object();
 	error parse_array();
 	error peek_next_token( token_type &result );
@@ -114,7 +114,7 @@ inline int parser::peek() const
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error parser::parse_value( value &result )
+inline error parser::parse_value( detail::value &result )
 {
 	token_type tt = token_type::unknown;
 	if ( auto err = peek_next_token( tt ) )
@@ -129,7 +129,7 @@ inline error parser::parse_value( value &result )
 			if ( double number = 0.0; auto err = parse_number( number ) )
 				return err;
 			else
-				result = value( number );
+				result = detail::value( number );
 		}
 		break;
 
@@ -149,13 +149,13 @@ inline error parser::parse_value( value &result )
 			else
 			{
 				if ( lit == token_type::literal_true )
-					result = value( true );
+					result = detail::value( true );
 				else if ( lit == token_type::literal_false )
-					result = value( false );
+					result = detail::value( false );
 				else if ( lit == token_type::literal_null )
-					result = value();
+					result = detail::value();
 				else if ( lit == token_type::literal_NaN )
-					result = value( NAN );
+					result = detail::value( NAN );
 				else
 					return make_error( error::invalid_literal );
 			}
@@ -245,11 +245,11 @@ inline error parser::parse_object()
 
 		next(); // Consume ':'
 
-		value newValue;
+		detail::value newValue;
 		if ( auto err = parse_value( newValue ) )
 			return err;
 
-		value key = new_string( keyOffset );
+		detail::value key = new_string( keyOffset );
 		key._loc = keyLoc;
 
 		( *this )( key, newValue );
@@ -284,7 +284,7 @@ inline error parser::parse_array()
 			continue;
 		}
 
-		value newValue;
+		detail::value newValue;
 		if ( auto err = parse_value( newValue ) )
 			return err;
 
@@ -511,11 +511,6 @@ inline error parser::parse_literal( token_type &result )
 {
 	int ch = peek();
 
-	if ( _loc.offset >= 99325679 )
-	{
-		ch = ch * 1;
-	}
-
 	// "true"
 	if ( ch == 't' )
 	{
@@ -552,6 +547,7 @@ inline error parser::parse_literal( token_type &result )
 			return { error::none };
 		}
 	}
+
 
 	return make_error( error::invalid_literal );
 }

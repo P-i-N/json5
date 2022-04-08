@@ -30,7 +30,7 @@ template <typename T> error from_string( string_view str, T &out );
 namespace detail {
 
 /* Forward declarations */
-template <typename T> error read( const json5::value &in, T &out );
+template <typename T> error read( const value &in, T &out );
 
 class writer final : public builder
 {
@@ -62,20 +62,20 @@ inline string_view get_name_slice( const char *names, size_t index )
 }
 
 /* Forward declarations */
-template <typename T> json5::value write( writer &w, const T &in );
+template <typename T> value write( writer &w, const T &in );
 
 //---------------------------------------------------------------------------------------------------------------------
-inline json5::value write( writer &w, bool in ) { return json5::value( in ); }
-inline json5::value write( writer &w, int in ) { return json5::value( double( in ) ); }
-inline json5::value write( writer &w, unsigned in ) { return json5::value( double( in ) ); }
-inline json5::value write( writer &w, float in ) { return json5::value( double( in ) ); }
-inline json5::value write( writer &w, double in ) { return json5::value( in ); }
-inline json5::value write( writer &w, const char *in ) { return w.new_string( in ); }
-inline json5::value write( writer &w, const string &in ) { return w.new_string( in ); }
+inline value write( writer &w, bool in ) { return value( in ); }
+inline value write( writer &w, int in ) { return value( double( in ) ); }
+inline value write( writer &w, unsigned in ) { return value( double( in ) ); }
+inline value write( writer &w, float in ) { return value( double( in ) ); }
+inline value write( writer &w, double in ) { return value( in ); }
+inline value write( writer &w, const char *in ) { return w.new_string( in ); }
+inline value write( writer &w, const string &in ) { return w.new_string( in ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::value write_array( writer &w, const T *in, size_t numItems )
+inline value write_array( writer &w, const T *in, size_t numItems )
 {
 	w.push_array();
 
@@ -87,16 +87,16 @@ inline json5::value write_array( writer &w, const T *in, size_t numItems )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline json5::value write( writer &w, const std::vector<T, A> &in ) { return write_array( w, in.data(), in.size() ); }
+inline value write( writer &w, const std::vector<T, A> &in ) { return write_array( w, in.data(), in.size() ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline json5::value write( writer &w, const T( &in )[N] ) { return write_array( w, in, N ); }
+inline value write( writer &w, const T( &in )[N] ) { return write_array( w, in, N ); }
 
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::value write_map( writer &w, const T &in )
+inline value write_map( writer &w, const T &in )
 {
 	w.push_object();
 
@@ -109,28 +109,30 @@ inline json5::value write_map( writer &w, const T &in )
 #if !defined( JSON5_DO_NOT_USE_STL )
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline json5::value write( writer &w, const std::array<T, N> &in )
+inline value write( writer &w, const std::array<T, N> &in )
 {
 	return write_array( w, in.data(), N );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline json5::value write( writer &w, const std::map<K, T, P, A> &in )
+inline value write( writer &w, const std::map<K, T, P, A> &in )
 {
 	return write_map( w, in );
 }
 
+//---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline json5::value write( writer &w, const std::unordered_map<K, T, H, EQ, A> &in )
+inline value write( writer &w, const std::unordered_map<K, T, H, EQ, A> &in )
 {
 	return write_map( w, in );
 }
+
 #endif
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::value write_enum( writer &w, T in )
+inline value write_enum( writer &w, T in )
 {
 	size_t index = 0;
 	const auto *names = enum_table<T>::names;
@@ -179,7 +181,7 @@ inline void write( writer &w, const json5::detail::named_ref_list<Types...> &t )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline json5::value write( writer &w, const T &in )
+inline value write( writer &w, const T &in )
 {
 	w.push_object();
 	write( w, class_wrapper<T>::make_named_ref_list( in ) );
@@ -189,10 +191,10 @@ inline json5::value write( writer &w, const T &in )
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* Forward declarations */
-template <typename T> error read( const json5::value &in, T &out );
+template <typename T> error read( const value &in, T &out );
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, bool &out )
+inline error read( const value &in, bool &out )
 {
 	if ( !in.is_boolean() )
 		return { error::number_expected, in.loc() };
@@ -203,19 +205,19 @@ inline error read( const json5::value &in, bool &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_number( const json5::value &in, T &out )
+inline error read_number( const value &in, T &out )
 {
 	return in.try_get_number( out ) ? error() : error{ error::number_expected, in.loc() };
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, int &out ) { return read_number( in, out ); }
-inline error read( const json5::value &in, unsigned &out ) { return read_number( in, out ); }
-inline error read( const json5::value &in, float &out ) { return read_number( in, out ); }
-inline error read( const json5::value &in, double &out ) { return read_number( in, out ); }
+inline error read( const value &in, int &out ) { return read_number( in, out ); }
+inline error read( const value &in, unsigned &out ) { return read_number( in, out ); }
+inline error read( const value &in, float &out ) { return read_number( in, out ); }
+inline error read( const value &in, double &out ) { return read_number( in, out ); }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, const char *&out )
+inline error read( const value &in, const char *&out )
 {
 	if ( !in.is_string() )
 		return { error::string_expected, in.loc() };
@@ -225,7 +227,7 @@ inline error read( const json5::value &in, const char *&out )
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline error read( const json5::value &in, string &out )
+inline error read( const value &in, string &out )
 {
 	if ( !in.is_string() )
 		return { error::string_expected, in.loc() };
@@ -236,7 +238,7 @@ inline error read( const json5::value &in, string &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_array( const json5::value &in, T *out, size_t numItems )
+inline error read_array( const value &in, T *out, size_t numItems )
 {
 	if ( !in.is_array() )
 		return { error::array_expected, in.loc() };
@@ -254,11 +256,11 @@ inline error read_array( const json5::value &in, T *out, size_t numItems )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline error read( const json5::value &in, T( &out )[N] ) { return read_array( in, out, N ); }
+inline error read( const value &in, T( &out )[N] ) { return read_array( in, out, N ); }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, typename A>
-inline error read( const json5::value &in, std::vector<T, A> &out )
+inline error read( const value &in, std::vector<T, A> &out )
 {
 	if ( !in.is_array() && !in.is_null() )
 		return { error::array_expected, in.loc() };
@@ -276,7 +278,7 @@ inline error read( const json5::value &in, std::vector<T, A> &out )
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_map( const json5::value &in, T &out )
+inline error read_map( const value &in, T &out )
 {
 	if ( !in.is_object() && !in.is_null() )
 		return { error::object_expected, in.loc() };
@@ -300,20 +302,20 @@ inline error read_map( const json5::value &in, T &out )
 #if !defined( JSON5_DO_NOT_USE_STL )
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T, size_t N>
-inline error read( const json5::value &in, std::array<T, N> &out )
+inline error read( const value &in, std::array<T, N> &out )
 {
 	return read_array( in, out.data(), N );
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename K, typename T, typename P, typename A>
-inline error read( const json5::value &in, std::map<K, T, P, A> &out )
+inline error read( const value &in, std::map<K, T, P, A> &out )
 {
 	return read_map( in, out );
 }
 
 template <typename K, typename T, typename H, typename EQ, typename A>
-inline error read( const json5::value &in, std::unordered_map<K, T, H, EQ, A> &out )
+inline error read( const value &in, std::unordered_map<K, T, H, EQ, A> &out )
 {
 	return read_map( in, out );
 }
@@ -321,7 +323,7 @@ inline error read( const json5::value &in, std::unordered_map<K, T, H, EQ, A> &o
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read_enum( const json5::value &in, T &out )
+inline error read_enum( const value &in, T &out )
 {
 	if ( !in.is_string() && !in.is_number() )
 		return { error::string_expected, in.loc() };
@@ -400,7 +402,7 @@ inline error read( const json5::object_view &obj, json5::detail::named_ref_list<
 
 //---------------------------------------------------------------------------------------------------------------------
 template <typename T>
-inline error read( const json5::value &in, T &out )
+inline error read( const value &in, T &out )
 {
 	if ( !in.is_object() )
 		return { error::object_expected, in.loc() };

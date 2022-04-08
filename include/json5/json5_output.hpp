@@ -99,7 +99,7 @@ inline void to_string( string &str, const char *utf8Str, char quotes, bool escap
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-inline void to_string( string &str, const value &v, const writer_params &wp, int depth )
+inline void to_string( string &str, const detail::value &v, const writer_params &wp, int depth )
 {
 	const char *kvSeparator = ": ";
 	const char *eol = wp.eol;

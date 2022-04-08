@@ -66,7 +66,8 @@ namespace json5 {
 class builder;
 class document;
 class parser;
-class value;
+
+namespace detail { class value; }
 
 //---------------------------------------------------------------------------------------------------------------------
 struct location final
