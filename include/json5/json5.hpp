@@ -3,12 +3,12 @@
 #include "json5_base.hpp"
 
 #if !defined( JSON5_DO_NOT_USE_STL )
-	#include <string>
-	#include <vector>
-	#define _JSON5_MOVE                std::move
-	#define _JSON5_FORWARD             std::forward
-	#define _JSON5_DECAY( _Type )      std::decay_t<_Type>
-	#define _JSON5_UNDERLYING( _Type ) std::underlying_type_t<_Type>
+#include <string>
+#include <vector>
+#define _JSON5_MOVE                std::move
+#define _JSON5_FORWARD             std::forward
+#define _JSON5_DECAY( _Type )      std::decay_t<_Type>
+#define _JSON5_UNDERLYING( _Type ) std::underlying_type_t<_Type>
 
 namespace json5 {
 using string = std::string;
@@ -192,7 +192,7 @@ class document final: public detail::value
 {
 public:
 	// Construct empty document
-	document(): detail::value() { _data = detail::value::type_null | detail::value::mask_is_document; }
+	document(): detail::value() { reset(); }
 
 	// Construct a document copy
 	document( const document &copy ) { assign_copy( copy ); }
@@ -250,8 +250,8 @@ public:
 	// Construct object view over a value. If the provided value does not reference a JSON object,
 	// this object_view will be created empty (and invalid)
 	object_view( const detail::value &v ) noexcept
-	  : _pair( v.is_object() ? ( v.payload<const detail::value *>() + 1 ) : nullptr )
-	  , _count( _pair ? ( _pair[-1].get_number<size_t>() / 2 ) : 0 )
+		: _pair( v.is_object() ? ( v.payload<const detail::value *>() + 1 ) : nullptr )
+		, _count( _pair ? ( _pair[-1].get_number<size_t>() / 2 ) : 0 )
 	{}
 
 	// Checks, if object view was constructed from valid value
@@ -331,8 +331,8 @@ public:
 	// Construct array view over a value. If the provided value does not reference a JSON array,
 	// this array_view will be created empty (and invalid)
 	array_view( const detail::value &v ) noexcept
-	  : _value( v.is_array() ? ( v.payload<const detail::value *>() + 1 ) : nullptr )
-	  , _count( _value ? _value[-1].get_number<size_t>() : 0 )
+		: _value( v.is_array() ? ( v.payload<const detail::value *>() + 1 ) : nullptr )
+		, _count( _value ? _value[-1].get_number<size_t>() : 0 )
 	{}
 
 	// Checks, if array view was constructed from valid value
